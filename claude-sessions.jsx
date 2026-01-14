@@ -1,8 +1,45 @@
 // Claude Code Usage Widget for Übersicht
 // Displays 30-day usage data with Apple Liquid Glass design
 
+import { run } from 'uebersicht';
+
 // Read from cache file (updated periodically by launchd)
 export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'`;
+
+/**
+ * Opens a new Ghostty terminal, navigates to the session directory, and resumes the Claude session.
+ * @param {string} sessionId - The session ID to resume
+ * @param {string} cwd - The working directory for the session
+ */
+const openSessionInGhostty = (sessionId, cwd) => {
+  // cwdのエスケープ処理（シングルクォート内で使うためにシングルクォートをエスケープ）
+  const escapedCwd = cwd.replace(/'/g, "'\"'\"'");
+  const escapedSessionId = sessionId.replace(/'/g, "'\"'\"'");
+
+  // AppleScriptを使ってGhosttyを開き、コマンドを実行
+  const script = `
+osascript -e '
+tell application "Ghostty"
+  activate
+end tell
+delay 0.1
+tell application "System Events"
+  tell process "Ghostty"
+    keystroke "n" using command down
+  end tell
+end tell
+delay 0.3
+tell application "System Events"
+  keystroke "cd '"'"'${escapedCwd}'"'"' && claude --resume ${escapedSessionId}"
+  keystroke return
+end tell
+'
+  `.trim();
+
+  run(script).catch((err) => {
+    console.error('Failed to open session in Ghostty:', err);
+  });
+};
 
 export const refreshFrequency = 10000; // Check cache every 10 seconds for session updates
 
@@ -185,11 +222,17 @@ const sessionDisplayStyle = {
   maxWidth: '200px',
 };
 
-const sessionIdStyle = {
-  color: '#888888',
+const sessionIdButtonStyle = {
+  color: '#2563eb',
   fontSize: '9px',
   fontFamily: 'SF Mono, Monaco, monospace',
   flexShrink: 0,
+  cursor: 'pointer',
+  padding: '3px 6px',
+  borderRadius: '4px',
+  border: '1px solid rgba(37, 99, 235, 0.3)',
+  background: 'rgba(37, 99, 235, 0.1)',
+  pointerEvents: 'auto',
 };
 
 const emptyStyle = {
@@ -331,7 +374,13 @@ export const render = ({ output }) => {
                     <div style={sessionContentStyle}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={sessionNameStyle}>{session.name}</span>
-                        <span style={sessionIdStyle}>{formatSessionId(session.sessionId)}</span>
+                        <button
+                          style={sessionIdButtonStyle}
+                          onClick={() => openSessionInGhostty(session.sessionId, session.cwd)}
+                          title={`Open in Ghostty: ${session.cwd}`}
+                        >
+                          {formatSessionId(session.sessionId)}
+                        </button>
                       </div>
                       {session.display && (
                         <div style={sessionDisplayStyle}>{session.display}</div>
@@ -364,7 +413,13 @@ export const render = ({ output }) => {
                       <div style={sessionContentStyle}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ ...sessionNameStyle, color: '#555555' }}>{session.name}</span>
-                          <span style={sessionIdStyle}>{formatSessionId(session.sessionId)}</span>
+                          <button
+                            style={sessionIdButtonStyle}
+                            onClick={() => openSessionInGhostty(session.sessionId, session.cwd)}
+                            title={`Open in Ghostty: ${session.cwd}`}
+                          >
+                            {formatSessionId(session.sessionId)}
+                          </button>
                         </div>
                         {session.display && (
                           <div style={{ ...sessionDisplayStyle, color: '#888888' }}>{session.display}</div>
