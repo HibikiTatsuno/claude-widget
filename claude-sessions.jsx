@@ -4,13 +4,13 @@
 // Read from cache file (updated periodically by launchd)
 export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'`;
 
-export const refreshFrequency = 60000; // Check cache every 60 seconds
+export const refreshFrequency = 10000; // Check cache every 10 seconds for session updates
 
 export const className = `
   bottom: 20px;
   left: 15px;
   width: 300px;
-  height: 480px;
+  height: 620px;
   background: linear-gradient(
     145deg,
     rgba(255, 255, 255, 0.7) 0%,
@@ -35,7 +35,7 @@ export const className = `
 `;
 
 const titleStyle = {
-  margin: '0 0 20px 0',
+  margin: '0 0 16px 0',
   fontSize: '16px',
   fontWeight: '600',
   color: '#1a1a1a',
@@ -48,9 +48,9 @@ const chartContainerStyle = {
   display: 'flex',
   alignItems: 'flex-end',
   justifyContent: 'space-between',
-  height: '180px',
-  padding: '16px 8px 10px 8px',
-  marginBottom: '16px',
+  height: '140px',
+  padding: '12px 8px 8px 8px',
+  marginBottom: '12px',
   background: 'rgba(255, 255, 255, 0.5)',
   borderRadius: '16px',
   border: '1px solid rgba(255, 255, 255, 0.7)',
@@ -72,8 +72,7 @@ const barLabelStyle = {
 };
 
 const statsContainerStyle = {
-  marginTop: '16px',
-  padding: '16px',
+  padding: '14px',
   background: 'rgba(255, 255, 255, 0.5)',
   borderRadius: '16px',
   border: '1px solid rgba(255, 255, 255, 0.7)',
@@ -82,7 +81,7 @@ const statsContainerStyle = {
 const statRowStyle = {
   display: 'flex',
   justifyContent: 'space-between',
-  marginBottom: '10px',
+  marginBottom: '8px',
 };
 
 const statLabelStyle = {
@@ -103,6 +102,66 @@ const highlightValueStyle = {
   fontWeight: '700',
 };
 
+const sessionsSectionStyle = {
+  marginTop: '12px',
+  padding: '14px',
+  background: 'rgba(255, 255, 255, 0.5)',
+  borderRadius: '16px',
+  border: '1px solid rgba(255, 255, 255, 0.7)',
+};
+
+const sessionsTitleStyle = {
+  fontSize: '12px',
+  fontWeight: '600',
+  color: '#1a1a1a',
+  marginBottom: '8px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+};
+
+const sessionItemStyle = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  padding: '6px 0',
+  borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+  fontSize: '10px',
+};
+
+const sessionContentStyle = {
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+};
+
+const sessionIconStyle = {
+  marginRight: '6px',
+  fontSize: '11px',
+};
+
+const sessionNameStyle = {
+  color: '#1a1a1a',
+  fontWeight: '500',
+  fontSize: '10px',
+  marginBottom: '2px',
+};
+
+const sessionDisplayStyle = {
+  color: '#666666',
+  fontSize: '9px',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  maxWidth: '200px',
+};
+
+const sessionIdStyle = {
+  color: '#888888',
+  fontSize: '9px',
+  fontFamily: 'SF Mono, Monaco, monospace',
+  flexShrink: 0,
+};
+
 const emptyStyle = {
   color: '#888888',
   fontStyle: 'italic',
@@ -117,15 +176,28 @@ const formatTokens = (tokens) => {
   return tokens.toString();
 };
 
+const formatSessionId = (id) => {
+  if (!id) return '';
+  return id.substring(0, 8);
+};
+
 export const render = ({ output }) => {
   let data = [];
   let totals = { totalCost: 0, totalTokens: 0 };
+  let activeSessions = [];
+  let completedSessions = [];
 
   try {
     const parsed = JSON.parse(output);
     if (parsed.daily && Array.isArray(parsed.daily)) {
       data = parsed.daily;
       totals = parsed.totals || totals;
+    }
+    if (parsed.activeSessions && Array.isArray(parsed.activeSessions)) {
+      activeSessions = parsed.activeSessions;
+    }
+    if (parsed.completedSessions && Array.isArray(parsed.completedSessions)) {
+      completedSessions = parsed.completedSessions;
     }
   } catch (e) {
     // JSON parse failed
@@ -149,9 +221,6 @@ export const render = ({ output }) => {
   return (
     <div>
       <h3 style={titleStyle}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-        </svg>
         Claude Code Usage
       </h3>
 
@@ -159,7 +228,7 @@ export const render = ({ output }) => {
         <div>
           <div style={chartContainerStyle}>
             {data.map((day, index) => {
-              const height = Math.max((day.totalCost / maxCost) * 140, 3);
+              const height = Math.max((day.totalCost / maxCost) * 100, 3);
               const date = new Date(day.date);
               const isRecent = index >= data.length - 7;
               const showLabel = index % 5 === 0 || index === data.length - 1;
@@ -201,6 +270,72 @@ export const render = ({ output }) => {
               <span style={statLabelStyle}>Total Tokens</span>
               <span style={statValueStyle}>{formatTokens(totals.totalTokens || 0)}</span>
             </div>
+          </div>
+
+          <div style={sessionsSectionStyle}>
+            <div style={sessionsTitleStyle}>
+              Active ({activeSessions.length})
+            </div>
+            <div style={{ maxHeight: '120px', overflowY: 'auto', overflowX: 'hidden' }}>
+              {activeSessions.length > 0 ? (
+                activeSessions.map((session, index) => (
+                  <div
+                    key={`active-${index}`}
+                    style={{
+                      ...sessionItemStyle,
+                      borderBottom: index === activeSessions.length - 1 && completedSessions.length === 0
+                        ? 'none'
+                        : sessionItemStyle.borderBottom,
+                    }}
+                  >
+                    <span style={{ ...sessionIconStyle, color: '#22c55e', marginTop: '2px' }}>●</span>
+                    <div style={sessionContentStyle}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={sessionNameStyle}>{session.name}</span>
+                        <span style={sessionIdStyle}>{formatSessionId(session.sessionId)}</span>
+                      </div>
+                      {session.display && (
+                        <div style={sessionDisplayStyle}>{session.display}</div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ color: '#888888', fontSize: '10px', marginBottom: '8px' }}>No active sessions</div>
+              )}
+            </div>
+
+            {completedSessions.length > 0 && (
+              <div>
+                <div style={{ ...sessionsTitleStyle, marginTop: '10px', color: '#666666' }}>
+                  Recent ({completedSessions.length})
+                </div>
+                <div style={{ maxHeight: '120px', overflowY: 'auto', overflowX: 'hidden' }}>
+                  {completedSessions.map((session, index) => (
+                    <div
+                      key={`completed-${index}`}
+                      style={{
+                        ...sessionItemStyle,
+                        borderBottom: index === completedSessions.length - 1
+                          ? 'none'
+                          : sessionItemStyle.borderBottom,
+                      }}
+                    >
+                      <span style={{ ...sessionIconStyle, color: '#888888', marginTop: '2px' }}>○</span>
+                      <div style={sessionContentStyle}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ ...sessionNameStyle, color: '#555555' }}>{session.name}</span>
+                          <span style={sessionIdStyle}>{formatSessionId(session.sessionId)}</span>
+                        </div>
+                        {session.display && (
+                          <div style={{ ...sessionDisplayStyle, color: '#888888' }}>{session.display}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : (

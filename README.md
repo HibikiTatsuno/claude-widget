@@ -7,7 +7,9 @@ A macOS desktop widget for [Übersicht](https://tracesof.net/uebersicht/) that d
 - 30-day usage chart with bar visualization
 - Cost tracking (30-day total, 7-day total, today)
 - Total token count
-- Auto-refresh via launchd (every 5 minutes)
+- Active session tracking with session IDs (for `--resume`)
+- Recent completed sessions display
+- Auto-refresh via launchd (every minute)
 - Apple Liquid Glass transparent design
 
 ## Requirements
@@ -96,6 +98,27 @@ claude-widget/
 ├── com.claude.usage-cache.plist  # launchd configuration
 └── README.md
 ```
+
+## Usage
+
+### Resuming Sessions
+
+The widget displays session IDs (first 8 characters) next to each session name. You can use these IDs to resume a session:
+
+```bash
+claude --resume <session-id>
+```
+
+For example, if the widget shows `36158f10`, you can run:
+
+```bash
+claude --resume 36158f10
+```
+
+### Session Status
+
+- **Active (green dot)**: Sessions currently running in a terminal
+- **Recent (gray circle)**: Sessions completed within the last 2 hours
 
 ## Uninstall
 
