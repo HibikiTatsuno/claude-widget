@@ -45,16 +45,37 @@ const titleStyle = {
   gap: '10px',
 };
 
-const chartContainerStyle = {
-  display: 'flex',
-  alignItems: 'flex-end',
-  justifyContent: 'space-between',
-  height: '140px',
+const costDisplayStyle = {
+  textAlign: 'center',
+  marginBottom: '8px',
+};
+
+const costValueStyle = {
+  fontSize: '28px',
+  fontWeight: '700',
+  color: '#1a1a1a',
+  letterSpacing: '-1px',
+};
+
+const costLabelStyle = {
+  fontSize: '10px',
+  color: '#666666',
+  fontWeight: '500',
+};
+
+const chartWrapperStyle = {
   padding: '12px 8px 8px 8px',
   marginBottom: '12px',
   background: 'rgba(255, 255, 255, 0.5)',
   borderRadius: '16px',
   border: '1px solid rgba(255, 255, 255, 0.7)',
+};
+
+const chartContainerStyle = {
+  display: 'flex',
+  alignItems: 'flex-end',
+  justifyContent: 'space-between',
+  height: '100px',
 };
 
 const barContainerStyle = {
@@ -70,6 +91,14 @@ const barLabelStyle = {
   color: '#666666',
   marginTop: '4px',
   fontWeight: '500',
+};
+
+const barCostLabelStyle = {
+  fontSize: '9px',
+  color: '#1a1a1a',
+  fontWeight: '600',
+  marginBottom: '2px',
+  whiteSpace: 'nowrap',
 };
 
 const statsContainerStyle = {
@@ -227,8 +256,13 @@ export const render = ({ output }) => {
 
       {data.length > 0 ? (
         <div>
-          <div style={chartContainerStyle}>
-            {data.map((day, index) => {
+          <div style={chartWrapperStyle}>
+            <div style={costDisplayStyle}>
+              <div style={costValueStyle}>{formatCost(totals.totalCost || 0)}</div>
+              <div style={costLabelStyle}>30 Day Total</div>
+            </div>
+            <div style={chartContainerStyle}>
+              {data.map((day, index) => {
               const height = Math.max((day.totalCost / maxCost) * 100, 3);
               const date = new Date(day.date);
               const isRecent = index >= data.length - 7;
@@ -236,6 +270,9 @@ export const render = ({ output }) => {
 
               return (
                 <div key={index} style={barContainerStyle}>
+                  {isRecent && (
+                    <span style={barCostLabelStyle}>${day.totalCost.toFixed(0)}</span>
+                  )}
                   <div
                     style={{
                       width: '7px',
@@ -252,6 +289,7 @@ export const render = ({ output }) => {
                 </div>
               );
             })}
+            </div>
           </div>
 
           <div style={statsContainerStyle}>
