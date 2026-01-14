@@ -729,11 +729,6 @@ export const render = ({ output }) => {
                         >
                           ●
                         </span>
-                        {session.needsInput && (
-                          <span style={{ marginLeft: "2px", fontSize: "11px" }}>
-                            🔔
-                          </span>
-                        )}
                         <div style={sessionContentStyle}>
                           <div
                             style={{
@@ -742,7 +737,12 @@ export const render = ({ output }) => {
                               alignItems: "center",
                             }}
                           >
-                            <span style={sessionNameStyle}>{session.name}</span>
+                            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <span style={sessionNameStyle}>{session.name}</span>
+                              {session.needsInput && (
+                                <span style={{ fontSize: "12px", color: "#f59e0b" }}>🔔</span>
+                              )}
+                            </span>
                             <button
                               style={sessionIdButtonStyle}
                               onClick={() =>

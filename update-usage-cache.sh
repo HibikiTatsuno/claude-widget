@@ -121,7 +121,7 @@ ACTIVE_SESSIONS=$(ps aux | grep -E "[c]laude" | grep -v grep | while read -r lin
       fi
     fi
   fi
-done | sort -u | jq -s 'unique_by(.tty)' 2>/dev/null)
+done | sort -u | jq -s 'unique_by(.sessionId)' 2>/dev/null)
 
 # Default to empty array if nothing found
 if [ -z "$ACTIVE_SESSIONS" ] || [ "$ACTIVE_SESSIONS" = "null" ]; then
