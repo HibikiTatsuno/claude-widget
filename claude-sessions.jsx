@@ -8,9 +8,9 @@ export const refreshFrequency = 10000; // Check cache every 10 seconds for sessi
 
 export const className = `
   bottom: 20px;
-  left: 15px;
-  width: 300px;
-  height: 620px;
+  left: 20px;
+  width: 25%;
+  height: 70%;
   background: linear-gradient(
     145deg,
     rgba(255, 255, 255, 0.7) 0%,
