@@ -4,7 +4,8 @@
 import { run } from 'uebersicht';
 
 // Read from cache file (updated periodically by launchd)
-export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'`;
+// Also check hidden flag file to persist hide/show state
+export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"`;
 
 /**
  * Opens a new Ghostty terminal, navigates to the session directory, and resumes the Claude session.
@@ -38,6 +39,24 @@ end tell
 
   run(script).catch((err) => {
     console.error('Failed to open session in Ghostty:', err);
+  });
+};
+
+/**
+ * Hides the widget by creating a flag file.
+ */
+const hideWidget = () => {
+  run('touch ~/.claude/cache/widget-hidden.flag').catch((err) => {
+    console.error('Failed to hide widget:', err);
+  });
+};
+
+/**
+ * Shows the widget by removing the flag file.
+ */
+const showWidget = () => {
+  run('rm -f ~/.claude/cache/widget-hidden.flag').catch((err) => {
+    console.error('Failed to show widget:', err);
   });
 };
 
@@ -242,6 +261,38 @@ const emptyStyle = {
   marginTop: '60px',
 };
 
+const closeButtonStyle = {
+  marginLeft: 'auto',
+  background: 'rgba(0, 0, 0, 0.1)',
+  border: 'none',
+  borderRadius: '50%',
+  width: '24px',
+  height: '24px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  color: '#666666',
+  fontSize: '14px',
+  fontWeight: '600',
+  pointerEvents: 'auto',
+};
+
+const minimizedContainerStyle = {
+  width: '40px',
+  height: '40px',
+  background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.8) 0%, rgba(245, 245, 250, 0.7) 100%)',
+  backdropFilter: 'blur(20px)',
+  borderRadius: '50%',
+  border: '1px solid rgba(255, 255, 255, 0.6)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)',
+  pointerEvents: 'auto',
+};
+
 const formatCost = (cost) => `$${cost.toFixed(2)}`;
 const formatTokens = (tokens) => {
   if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
@@ -259,9 +310,16 @@ export const render = ({ output }) => {
   let totals = { totalCost: 0, totalTokens: 0 };
   let activeSessions = [];
   let completedSessions = [];
+  let isHidden = false;
+
+  // コマンド出力をパースして、使用状況データと非表示フラグを取得
+  const parts = output.split('---HIDDEN---');
+  const jsonPart = parts[0].trim();
+  const hiddenPart = parts[1] ? parts[1].trim() : 'false';
+  isHidden = hiddenPart === 'true';
 
   try {
-    const parsed = JSON.parse(output);
+    const parsed = JSON.parse(jsonPart);
     if (parsed.daily && Array.isArray(parsed.daily)) {
       data = parsed.daily;
       totals = parsed.totals || totals;
@@ -274,6 +332,19 @@ export const render = ({ output }) => {
     }
   } catch (e) {
     // JSON parse failed
+  }
+
+  // 非表示状態の場合、最小化されたボタンを表示
+  if (isHidden) {
+    return (
+      <div
+        style={minimizedContainerStyle}
+        onClick={showWidget}
+        title="Show Claude Code Widget"
+      >
+        <span style={{ fontSize: '18px', color: '#2563eb' }}>C</span>
+      </div>
+    );
   }
 
   // Get last 7 days for display
@@ -295,6 +366,13 @@ export const render = ({ output }) => {
     <div>
       <h3 style={titleStyle}>
         Claude Code Usage
+        <button
+          style={closeButtonStyle}
+          onClick={hideWidget}
+          title="Hide Widget"
+        >
+          x
+        </button>
       </h3>
 
       {data.length > 0 ? (
