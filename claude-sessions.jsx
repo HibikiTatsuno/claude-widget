@@ -6,7 +6,7 @@ import { run } from "uebersicht";
 // Read from cache file (updated periodically by launchd)
 // Also check hidden flag file to persist hide/show state
 // Fetch GitHub PRs using gh CLI
-export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'`;
+export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'`;
 
 /**
  * Opens a new Ghostty terminal, navigates to the session directory, and resumes the Claude session.
@@ -406,13 +406,66 @@ const formatSessionId = (id) => {
 const getReviewStatus = (reviewDecision) => {
   switch (reviewDecision) {
     case "APPROVED":
-      return { emoji: "\u2705", label: "Approved", textColor: "#ffffff", bgColor: "#22c55e" };
+      return {
+        label: "Approved",
+        textColor: "#166534",
+        bgColor: "#dcfce7",
+        borderColor: "#86efac",
+      };
     case "CHANGES_REQUESTED":
-      return { emoji: "\u274C", label: "Changes", textColor: "#ffffff", bgColor: "#dc2626" };
+      return {
+        label: "Changes",
+        textColor: "#991b1b",
+        bgColor: "#fee2e2",
+        borderColor: "#fca5a5",
+      };
     case "REVIEW_REQUIRED":
-      return { emoji: "\uD83D\uDFE1", label: "Review", textColor: "#ffffff", bgColor: "#ea580c" };
+      return {
+        label: "Review",
+        textColor: "#9a3412",
+        bgColor: "#ffedd5",
+        borderColor: "#fdba74",
+      };
     default:
       return null;
+  }
+};
+
+/**
+ * Returns CI status info with label, colors.
+ * @param {string|null} ciStatus - The CI status from GitHub API
+ * @returns {{label: string, textColor: string, bgColor: string, borderColor: string}|null}
+ */
+const getCIStatus = (ciStatus) => {
+  switch (ciStatus) {
+    case "SUCCESS":
+      return {
+        label: "CI Pass",
+        textColor: "#0e7490",
+        bgColor: "#cffafe",
+        borderColor: "#67e8f9",
+      };
+    case "FAILURE":
+      return {
+        label: "CI Fail",
+        textColor: "#be185d",
+        bgColor: "#fce7f3",
+        borderColor: "#f9a8d4",
+      };
+    case "PENDING":
+      return {
+        label: "CI Running",
+        textColor: "#6b21a8",
+        bgColor: "#f3e8ff",
+        borderColor: "#d8b4fe",
+      };
+    default:
+      return {
+        label: "CI N/A",
+        textColor: "#4b5563",
+        bgColor: "#f3f4f6",
+        borderColor: "#d1d5db",
+      };
   }
 };
 
@@ -460,11 +513,18 @@ export const render = ({ output }) => {
       githubPRs = graphqlResponse.data.search.edges.map((edge) => {
         const repo = edge.node.repository || {};
         const nameWithOwner = repo.nameWithOwner || "";
+        const comments = edge.node.comments || {};
+        const commits = edge.node.commits || {};
+        const lastCommit = (commits.nodes && commits.nodes[0]) || {};
+        const statusCheckRollup =
+          (lastCommit.commit && lastCommit.commit.statusCheckRollup) || {};
         return {
           number: edge.node.number,
           title: edge.node.title,
           url: edge.node.url,
           reviewDecision: edge.node.reviewDecision,
+          commentCount: comments.totalCount || 0,
+          ciStatus: statusCheckRollup.state || null,
           repository: {
             nameWithOwner: nameWithOwner,
             name: nameWithOwner ? nameWithOwner.split("/")[1] : "",
@@ -859,29 +919,70 @@ export const render = ({ output }) => {
                         </span>
                         <span style={prNumberStyle}>#{pr.number}</span>
                       </div>
-                      {getReviewStatus(pr.reviewDecision) && (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {getReviewStatus(pr.reviewDecision) && (
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "2px 8px",
+                              borderRadius: "10px",
+                              fontSize: "9px",
+                              fontWeight: "600",
+                              background: getReviewStatus(pr.reviewDecision)
+                                .bgColor,
+                              color: getReviewStatus(pr.reviewDecision)
+                                .textColor,
+                              border:
+                                "1px solid " +
+                                getReviewStatus(pr.reviewDecision).borderColor,
+                            }}
+                          >
+                            {getReviewStatus(pr.reviewDecision).label}
+                          </div>
+                        )}
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "2px 8px",
+                            borderRadius: "10px",
+                            fontSize: "9px",
+                            fontWeight: "600",
+                            background: getCIStatus(pr.ciStatus).bgColor,
+                            color: getCIStatus(pr.ciStatus).textColor,
+                            border:
+                              "1px solid " +
+                              getCIStatus(pr.ciStatus).borderColor,
+                          }}
+                        >
+                          {getCIStatus(pr.ciStatus).label}
+                        </div>
                         <div
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
                             gap: "4px",
-                            marginTop: "4px",
-                            padding: "2px 6px",
-                            borderRadius: "4px",
+                            padding: "2px 8px",
+                            borderRadius: "10px",
                             fontSize: "9px",
-                            fontWeight: "500",
-                            background: getReviewStatus(pr.reviewDecision).bgColor,
-                            color: getReviewStatus(pr.reviewDecision).textColor,
+                            fontWeight: "600",
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
+                            border: "1px solid #93c5fd",
                           }}
                         >
-                          <span>
-                            {getReviewStatus(pr.reviewDecision).emoji}
-                          </span>
-                          <span>
-                            {getReviewStatus(pr.reviewDecision).label}
-                          </span>
+                          <span>{"\uD83D\uDCAC"}</span>
+                          <span>{pr.commentCount}</span>
                         </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })}

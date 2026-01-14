@@ -33,7 +33,7 @@ if [ -z "$USAGE_DATA" ] || [ "$USAGE_DATA" = "null" ]; then
 fi
 
 # Get session display names and IDs from history.jsonl (last 500 entries)
-# Group by sessionId and get the latest display for each (with timestamp for sorting)
+# Group by sessionId and get the latest display for each (with start and last timestamp)
 SESSION_DISPLAYS=$(tail -500 "$HISTORY_FILE" 2>/dev/null | jq -s '
   group_by(.sessionId) |
   map({
@@ -41,7 +41,8 @@ SESSION_DISPLAYS=$(tail -500 "$HISTORY_FILE" 2>/dev/null | jq -s '
     value: {
       display: (sort_by(.timestamp) | last | .display | split("\n")[0] | .[0:50]),
       project: (sort_by(.timestamp) | last | .project),
-      timestamp: (sort_by(.timestamp) | last | .timestamp)
+      timestamp: (sort_by(.timestamp) | last | .timestamp),
+      startTimestamp: (sort_by(.timestamp) | first | .timestamp)
     }
   }) |
   from_entries
@@ -73,11 +74,35 @@ ACTIVE_SESSIONS=$(ps aux | grep -E "[c]laude" | grep -v grep | while read -r lin
         session_name="~"
       fi
 
-      # Get session ID and display from history by project path (sorted by timestamp)
-      session_info=$(echo "$SESSION_DISPLAYS" | jq -r --arg cwd "$cwd" '
-        to_entries | map(select(.value.project == $cwd)) | sort_by(.value.timestamp) | last |
-        if . then "\(.key)|\(.value.display)" else "" end
-      ' 2>/dev/null)
+      # プロセス開始時刻を取得（ミリ秒単位のUNIXタイムスタンプに変換）
+      proc_start=$(ps -o lstart= -p "$pid" 2>/dev/null)
+      proc_start_ts=""
+      if [ -n "$proc_start" ]; then
+        proc_start_ts=$(date -j -f "%a %b %d %H:%M:%S %Y" "$proc_start" "+%s" 2>/dev/null)
+        if [ -n "$proc_start_ts" ]; then
+          proc_start_ts=$((proc_start_ts * 1000))
+        fi
+      fi
+
+      # Get session ID and display from history by project path
+      # プロセス開始時刻に最も近い開始時刻を持つセッションをマッチ
+      session_info=""
+      if [ -n "$proc_start_ts" ]; then
+        session_info=$(echo "$SESSION_DISPLAYS" | jq -r --arg cwd "$cwd" --argjson proc_ts "$proc_start_ts" '
+          to_entries | map(select(.value.project == $cwd)) |
+          map(. + {diff: ((.value.startTimestamp - $proc_ts) | if . < 0 then -. else . end)}) |
+          sort_by(.diff) | first |
+          if . then "\(.key)|\(.value.display)" else "" end
+        ' 2>/dev/null)
+      fi
+
+      # フォールバック: マッチしない場合は最新の更新があるセッションを使用
+      if [ -z "$session_info" ] || [ "$session_info" = "null|" ]; then
+        session_info=$(echo "$SESSION_DISPLAYS" | jq -r --arg cwd "$cwd" '
+          to_entries | map(select(.value.project == $cwd)) | sort_by(.value.timestamp) | last |
+          if . then "\(.key)|\(.value.display)" else "" end
+        ' 2>/dev/null)
+      fi
 
       if [ -n "$session_info" ] && [ "$session_info" != "" ]; then
         session_id=$(echo "$session_info" | cut -d'|' -f1)
@@ -96,7 +121,7 @@ ACTIVE_SESSIONS=$(ps aux | grep -E "[c]laude" | grep -v grep | while read -r lin
       fi
     fi
   fi
-done | sort -u | jq -s 'unique_by(.sessionId)' 2>/dev/null)
+done | sort -u | jq -s 'unique_by(.tty)' 2>/dev/null)
 
 # Default to empty array if nothing found
 if [ -z "$ACTIVE_SESSIONS" ] || [ "$ACTIVE_SESSIONS" = "null" ]; then
