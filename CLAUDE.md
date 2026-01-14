@@ -4,16 +4,26 @@
 
 ## Development Rules
 
-### Deployment
+### IMPORTANT: Auto-Deploy After Changes
 
-After modifying any files in this directory (especially `claude-sessions.jsx`), you MUST run the deploy script to update the widget:
+**Every time you modify `claude-sessions.jsx`, you MUST immediately run the deploy script:**
+
+```bash
+~/.claude/scripts/deploy-widget.sh
+```
+
+This is REQUIRED because the widget file in this directory is NOT directly used by Übersicht. The deploy script copies the file to Übersicht's widgets folder and restarts Übersicht.
+
+**DO NOT forget to run the deploy script after any changes to `claude-sessions.jsx`.**
+
+### Deploy Script Location
 
 ```bash
 ~/.claude/scripts/deploy-widget.sh
 ```
 
 This script:
-1. Copies the widget file to Übersicht's widgets folder
+1. Copies `claude-sessions.jsx` to `~/Library/Application Support/Übersicht/widgets/`
 2. Restarts Übersicht to apply changes
 
 ### Auto-Deploy (Watch Mode)
@@ -40,6 +50,9 @@ This uses `fswatch` to monitor changes and auto-deploy. Press Ctrl+C to stop.
   - Review status (Approved/Changes/Review)
   - CI status (Pass/Fail/Running/N/A)
   - Comment count
+- GitHub Activity section with:
+  - 30-day contribution bar chart
+  - Weekly summary (Commits, PRs, Reviews)
 
 ### Important Notes
 

@@ -6,7 +6,7 @@ import { run } from "uebersicht";
 // Read from cache file (updated periodically by launchd)
 // Also check hidden flag file to persist hide/show state
 // Fetch GitHub PRs using gh CLI
-export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'`;
+export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'; echo "---CONTRIBUTIONS---"; FROM_DATE=$(date -v-30d -u +"%Y-%m-%dT00:00:00Z"); TO_DATE=$(date -u +"%Y-%m-%dT23:59:59Z"); /opt/homebrew/bin/gh api graphql -f query="query { viewer { contributionsCollection(from: \\"$FROM_DATE\\", to: \\"$TO_DATE\\") { totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } } } } }" 2>/dev/null || echo '{}'`;
 
 /**
  * Opens a new Ghostty terminal, navigates to the session directory, and resumes the Claude session.
@@ -290,7 +290,7 @@ const rightColumnStyle = {
   display: "flex",
   flexDirection: "column",
   overflow: "hidden",
-  maxHeight: "200px",
+  gap: "12px",
 };
 
 // GitHub PR panel styles
@@ -299,7 +299,7 @@ const prPanelStyle = {
   background: "rgba(255, 255, 255, 0.5)",
   borderRadius: "16px",
   border: "1px solid rgba(255, 255, 255, 0.7)",
-  flex: 1,
+  maxHeight: "280px",
   overflowY: "auto",
   overflowX: "hidden",
 };
@@ -476,14 +476,27 @@ export const render = ({ output }) => {
   let completedSessions = [];
   let isHidden = false;
   let githubPRs = [];
+  let contributions = {
+    totalCommits: 0,
+    totalPRs: 0,
+    totalReviews: 0,
+    daily: [],
+  };
 
-  // コマンド出力をパースして、使用状況データと非表示フラグとGitHub PRを取得
+  // コマンド出力をパースして、使用状況データと非表示フラグとGitHub PRとコントリビューションを取得
   const hiddenSplit = output.split("---HIDDEN---");
   const jsonPart = hiddenSplit[0].trim();
   const afterHidden = hiddenSplit[1] || "";
   const githubSplit = afterHidden.split("---GITHUB---");
   const hiddenPart = githubSplit[0].trim();
-  const githubPart = githubSplit[1] ? githubSplit[1].trim() : "[]";
+  const afterGithub = githubSplit[1] || "";
+  const contributionsSplit = afterGithub.split("---CONTRIBUTIONS---");
+  const githubPart = contributionsSplit[0]
+    ? contributionsSplit[0].trim()
+    : "{}";
+  const contributionsPart = contributionsSplit[1]
+    ? contributionsSplit[1].trim()
+    : "{}";
   isHidden = hiddenPart === "true";
 
   try {
@@ -534,6 +547,40 @@ export const render = ({ output }) => {
     }
   } catch (e) {
     // GitHub JSON parse failed
+  }
+
+  // GitHub Contributionsデータをパース
+  // 注意: GitHubのcontribution graphは個人アカウントへの直接プッシュのみカウントされる
+  // organization（会社のリポジトリ等）へのコントリビューションは含まれない
+  try {
+    const contribResponse = JSON.parse(contributionsPart);
+    if (
+      contribResponse.data &&
+      contribResponse.data.viewer &&
+      contribResponse.data.viewer.contributionsCollection
+    ) {
+      const cc = contribResponse.data.viewer.contributionsCollection;
+      contributions.totalCommits = cc.totalCommitContributions || 0;
+      contributions.totalPRs = cc.totalPullRequestContributions || 0;
+      contributions.totalReviews = cc.totalPullRequestReviewContributions || 0;
+
+      // 日別データを抽出（直近30日）
+      if (cc.contributionCalendar && cc.contributionCalendar.weeks) {
+        const allDays = [];
+        cc.contributionCalendar.weeks.forEach((week) => {
+          week.contributionDays.forEach((day) => {
+            allDays.push({
+              date: day.date,
+              count: day.contributionCount,
+            });
+          });
+        });
+        // 直近30日を取得
+        contributions.daily = allDays.slice(-30);
+      }
+    }
+  } catch (e) {
+    // Contributions JSON parse failed
   }
 
   // 非表示状態の場合、最小化されたボタンを表示
@@ -737,10 +784,22 @@ export const render = ({ output }) => {
                               alignItems: "center",
                             }}
                           >
-                            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                              <span style={sessionNameStyle}>{session.name}</span>
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                            >
+                              <span style={sessionNameStyle}>
+                                {session.name}
+                              </span>
                               {session.needsInput && (
-                                <span style={{ fontSize: "12px", color: "#f59e0b" }}>🔔</span>
+                                <span
+                                  style={{ fontSize: "12px", color: "#f59e0b" }}
+                                >
+                                  🔔
+                                </span>
                               )}
                             </span>
                             <button
@@ -990,6 +1049,135 @@ export const render = ({ output }) => {
             ) : (
               <div style={prEmptyStyle}>No open pull requests</div>
             )}
+          </div>
+
+          {/* GitHub Contributions */}
+          <div
+            style={{
+              padding: "14px",
+              background: "rgba(255, 255, 255, 0.5)",
+              borderRadius: "16px",
+              border: "1px solid rgba(255, 255, 255, 0.7)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "14px",
+                fontWeight: "600",
+                color: "#1a1a1a",
+                marginBottom: "12px",
+              }}
+            >
+              GitHub Activity
+            </div>
+
+            {/* Weekly Summary */}
+            <div
+              style={{
+                display: "flex",
+                gap: "8px",
+                marginBottom: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "8px",
+                  background: "#dbeafe",
+                  color: "#1e40af",
+                  fontSize: "10px",
+                  fontWeight: "600",
+                }}
+              >
+                Commits: {contributions.totalCommits}
+              </div>
+              <div
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "8px",
+                  background: "#dcfce7",
+                  color: "#166534",
+                  fontSize: "10px",
+                  fontWeight: "600",
+                }}
+              >
+                PRs: {contributions.totalPRs}
+              </div>
+              <div
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "8px",
+                  background: "#fef3c7",
+                  color: "#92400e",
+                  fontSize: "10px",
+                  fontWeight: "600",
+                }}
+              >
+                Reviews: {contributions.totalReviews}
+              </div>
+            </div>
+
+            {/* 30-day Bar Chart */}
+            <div
+              style={{
+                fontSize: "10px",
+                color: "#666666",
+                marginBottom: "6px",
+              }}
+            >
+              30-day Contributions
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-end",
+                height: "50px",
+                gap: "2px",
+              }}
+            >
+              {contributions.daily.map((day, index) => {
+                const maxCount = Math.max(
+                  ...contributions.daily.map((d) => d.count),
+                  1,
+                );
+                const height = Math.max(
+                  (day.count / maxCount) * 100,
+                  day.count > 0 ? 10 : 2,
+                );
+                const isRecent = index >= contributions.daily.length - 7;
+                return (
+                  <div
+                    key={day.date}
+                    style={{
+                      flex: 1,
+                      height: `${height}%`,
+                      background:
+                        day.count > 0
+                          ? isRecent
+                            ? "#22c55e"
+                            : "#86efac"
+                          : "#e5e7eb",
+                      borderRadius: "2px 2px 0 0",
+                      minWidth: "4px",
+                    }}
+                    title={`${day.date}: ${day.count} contributions`}
+                  />
+                );
+              })}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "8px",
+                color: "#9ca3af",
+                marginTop: "4px",
+              }}
+            >
+              <span>30 days ago</span>
+              <span>Today</span>
+            </div>
           </div>
         </div>
       </div>
