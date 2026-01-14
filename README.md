@@ -1,31 +1,31 @@
 # Claude Code Usage Widget
 
-A macOS desktop widget for [Übersicht](https://tracesof.net/uebersicht/) that displays Claude Code usage statistics and GitHub PR information with an Apple Liquid Glass design.
+[Übersicht](https://tracesof.net/uebersicht/)用のmacOSデスクトップウィジェットです。Claude Codeの使用統計とGitHub PR情報をApple Liquid Glassデザインで表示します。
 
-## Features
+## 機能
 
-### Claude Code Usage
-- 30-day usage chart with bar visualization
-- Cost tracking (30-day total, 7-day total, today)
-- Total token count display
-- Active session tracking with clickable session IDs
-- Recent completed sessions display
-- Bell notification for sessions waiting for input
+### Claude Code使用状況
+- 30日間の使用量をバーチャートで可視化
+- コスト追跡（30日合計、7日合計、今日）
+- 総トークン数の表示
+- アクティブセッションのトラッキング（クリック可能なセッションID）
+- 最近完了したセッションの表示
+- 入力待ちセッションのベル通知
 
 ### GitHub Pull Requests
-- List of your open PRs across all repositories
-- **Review Status** - Approved / Changes Requested / Review Required
-- **CI Status** - Pass / Fail / Running / N/A
-- **Comment Count** - Number of comments on each PR
-- Click to open PR or repository in browser
+- 全リポジトリのオープンPR一覧
+- **レビューステータス** - Approved / Changes Requested / Review Required
+- **CIステータス** - Pass / Fail / Running / N/A
+- **コメント数** - 各PRのコメント数
+- クリックでPRまたはリポジトリをブラウザで開く
 
-### UI Features
-- Apple Liquid Glass transparent design
-- Hide/show toggle with minimized button
-- Auto-refresh every 10 seconds
-- Click session ID to open in Ghostty terminal
+### UI機能
+- Apple Liquid Glass透明デザイン
+- 表示/非表示トグル（最小化ボタン）
+- 10秒ごとの自動更新
+- セッションIDクリックでGhosttyターミナルを開く
 
-## Screenshots
+## スクリーンショット
 
 ```
 +----------------------------------+
@@ -50,53 +50,53 @@ A macOS desktop widget for [Übersicht](https://tracesof.net/uebersicht/) that d
 +----------------------------------+
 ```
 
-## Requirements
+## 必要なもの
 
 - macOS
 - [Übersicht](https://tracesof.net/uebersicht/)
-- [ccusage](https://github.com/ryoppippi/ccusage) - Claude Code usage tracker
-- [jq](https://jqlang.github.io/jq/) - JSON processor
-- [GitHub CLI](https://cli.github.com/) - For PR information
+- [ccusage](https://github.com/ryoppippi/ccusage) - Claude Code使用量トラッカー
+- [jq](https://jqlang.github.io/jq/) - JSONプロセッサ
+- [GitHub CLI](https://cli.github.com/) - PR情報の取得用
 
-## Installation
+## インストール
 
-### 1. Install dependencies
+### 1. 依存関係のインストール
 
 ```bash
-# Install Übersicht
+# Übersichtのインストール
 brew install --cask ubersicht
 
-# Install jq
+# jqのインストール
 brew install jq
 
-# Install GitHub CLI and authenticate
+# GitHub CLIのインストールと認証
 brew install gh
 gh auth login
 
-# Install ccusage
-pnpm add -g ccusage  # or npm install -g ccusage
+# ccusageのインストール
+pnpm add -g ccusage  # または npm install -g ccusage
 ```
 
-### 2. Clone repository
+### 2. リポジトリのクローン
 
 ```bash
 git clone https://github.com/HibikiTatsuno/claude-widget.git
 cd claude-widget
 ```
 
-### 3. Copy widget file to Übersicht
+### 3. ウィジェットファイルをÜbersichtにコピー
 
 ```bash
 cp claude-sessions.jsx ~/Library/Application\ Support/Übersicht/widgets/
 ```
 
-Or create a symlink for easier development:
+開発用にシンボリックリンクを作成する場合：
 
 ```bash
 ln -s "$(pwd)/claude-sessions.jsx" ~/Library/Application\ Support/Übersicht/widgets/
 ```
 
-### 4. Set up cache directory and update script
+### 4. キャッシュディレクトリと更新スクリプトのセットアップ
 
 ```bash
 mkdir -p ~/.claude/cache
@@ -104,142 +104,142 @@ cp update-usage-cache.sh ~/.claude/cache/
 chmod +x ~/.claude/cache/update-usage-cache.sh
 ```
 
-### 5. Configure launchd for auto-refresh
+### 5. launchdの設定（自動更新用）
 
 ```bash
-# Edit the plist to update the path if necessary
+# 必要に応じてplist内のパスを編集
 cp com.claude.usage-cache.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.claude.usage-cache.plist
 ```
 
-### 6. Initial cache generation
+### 6. 初回キャッシュ生成
 
 ```bash
 ~/.claude/cache/update-usage-cache.sh
 ```
 
-### 7. Launch Übersicht
+### 7. Übersichtの起動
 
 ```bash
 open -a "Übersicht"
 ```
 
-## Configuration
+## 設定
 
-### Widget Position
+### ウィジェットの位置
 
-Edit `claude-sessions.jsx` and modify the `className`:
+`claude-sessions.jsx`の`className`を編集：
 
 ```javascript
-bottom: 20px;  // Distance from bottom
-left: 20px;    // Distance from left
-width: 320px;  // Widget width
-height: 70%;   // Widget height
+bottom: 20px;  // 下からの距離
+left: 20px;    // 左からの距離
+width: 320px;  // ウィジェットの幅
+height: 70%;   // ウィジェットの高さ
 ```
 
-### Cache Update Interval
+### キャッシュ更新間隔
 
-Edit `com.claude.usage-cache.plist`:
+`com.claude.usage-cache.plist`を編集：
 
 ```xml
 <key>StartInterval</key>
-<integer>60</integer>  <!-- 60 seconds = 1 minute -->
+<integer>60</integer>  <!-- 60秒 = 1分 -->
 ```
 
-Then reload:
+変更後に再読み込み：
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.claude.usage-cache.plist
 launchctl load ~/Library/LaunchAgents/com.claude.usage-cache.plist
 ```
 
-## File Structure
+## ファイル構成
 
 ```
 claude-widget/
-├── claude-sessions.jsx          # Übersicht widget source
-├── update-usage-cache.sh        # Cache update script
-├── com.claude.usage-cache.plist # launchd configuration
-├── CLAUDE.md                    # Development instructions
-├── llms.txt                     # AI-readable documentation
-└── README.md                    # This file
+├── claude-sessions.jsx          # Übersichtウィジェットのソース
+├── update-usage-cache.sh        # キャッシュ更新スクリプト
+├── com.claude.usage-cache.plist # launchd設定ファイル
+├── CLAUDE.md                    # 開発用ドキュメント
+├── llms.txt                     # AI用ドキュメント
+└── README.md                    # このファイル
 ```
 
-## Usage
+## 使い方
 
-### Resuming Sessions
+### セッションの再開
 
-Click on the session ID button (e.g., `d423eeca`) to open a new Ghostty terminal and resume the session automatically.
+セッションIDボタン（例：`d423eeca`）をクリックすると、新しいGhosttyターミナルが開き、自動的にセッションが再開されます。
 
-Or manually resume with:
+手動で再開する場合：
 
 ```bash
 claude --resume <session-id>
 ```
 
-### Session Status Icons
+### セッションステータスアイコン
 
-| Icon | Status |
-|------|--------|
-| ● (green) | Active session |
-| ○ (gray) | Recent completed session |
-| 🔔 | Session waiting for input |
+| アイコン | ステータス |
+|----------|-----------|
+| ● (緑) | アクティブセッション |
+| ○ (グレー) | 最近完了したセッション |
+| 🔔 | 入力待ちセッション |
 
-### PR Status Badges
+### PRステータスバッジ
 
-| Badge | Meaning |
-|-------|---------|
-| `Approved` (green) | PR has been approved |
-| `Changes` (red) | Changes have been requested |
-| `Review` (orange) | Awaiting review |
-| `CI Pass` (cyan) | CI checks passed |
-| `CI Fail` (pink) | CI checks failed |
-| `CI Running` (purple) | CI checks in progress |
-| `💬 N` (blue) | Number of comments |
+| バッジ | 意味 |
+|--------|------|
+| `Approved` (緑) | PRが承認済み |
+| `Changes` (赤) | 変更が要求されている |
+| `Review` (オレンジ) | レビュー待ち |
+| `CI Pass` (シアン) | CIチェック成功 |
+| `CI Fail` (ピンク) | CIチェック失敗 |
+| `CI Running` (紫) | CIチェック実行中 |
+| `💬 N` (青) | コメント数 |
 
-### Hide/Show Widget
+### ウィジェットの表示/非表示
 
-- Click the `x` button to minimize the widget
-- Click the `C` button to restore the widget
+- `x`ボタンをクリックでウィジェットを最小化
+- `C`ボタンをクリックでウィジェットを復元
 
-## Development
+## 開発
 
-### Deploy Script
+### デプロイスクリプト
 
-After modifying `claude-sessions.jsx`, run:
+`claude-sessions.jsx`を変更した後、以下を実行：
 
 ```bash
 ~/.claude/scripts/deploy-widget.sh
 ```
 
-### Auto-Deploy (Watch Mode)
+### 自動デプロイ（監視モード）
 
-To automatically deploy when files change:
+ファイル変更時に自動的にデプロイする場合：
 
 ```bash
 ~/.claude/scripts/watch-widget.sh
 ```
 
-This requires `fswatch`:
+`fswatch`が必要です：
 
 ```bash
 brew install fswatch
 ```
 
-## Uninstall
+## アンインストール
 
 ```bash
-# Stop launchd service
+# launchdサービスの停止
 launchctl unload ~/Library/LaunchAgents/com.claude.usage-cache.plist
 rm ~/Library/LaunchAgents/com.claude.usage-cache.plist
 
-# Remove widget
+# ウィジェットの削除
 rm ~/Library/Application\ Support/Übersicht/widgets/claude-sessions.jsx
 
-# Remove cache (optional)
+# キャッシュの削除（任意）
 rm -rf ~/.claude/cache
 ```
 
-## License
+## ライセンス
 
 MIT
