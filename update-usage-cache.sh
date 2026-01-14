@@ -28,6 +28,13 @@ SESSION_DISPLAYS=$(tail -500 "$HISTORY_FILE" 2>/dev/null | jq -s '
   from_entries
 ' 2>/dev/null)
 
+# Get list of sessions waiting for input
+PENDING_INPUT_DIR="$HOME/.claude/cache/pending-input"
+PENDING_IDS=""
+if [ -d "$PENDING_INPUT_DIR" ]; then
+  PENDING_IDS=$(ls "$PENDING_INPUT_DIR"/*.pending 2>/dev/null | xargs -I{} basename {} .pending | tr '\n' '|' | sed 's/|$//')
+fi
+
 # Build active sessions list from running Claude processes
 ACTIVE_SESSIONS=$(ps aux | grep -E "[c]laude" | grep -v grep | while read -r line; do
   pid=$(echo "$line" | awk '{print $2}')
@@ -54,7 +61,12 @@ ACTIVE_SESSIONS=$(ps aux | grep -E "[c]laude" | grep -v grep | while read -r lin
         if [ -n "$session_id" ] && [ "$session_id" != "null" ]; then
           # Escape special characters for JSON
           display_escaped=$(echo "$display" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr -d '\n')
-          echo "{\"name\":\"$session_name\",\"sessionId\":\"$session_id\",\"tty\":\"$tty\",\"display\":\"$display_escaped\",\"status\":\"active\"}"
+          # Check if this session needs input
+          needs_input="false"
+          if [ -n "$PENDING_IDS" ] && echo "$session_id" | grep -qE "^($PENDING_IDS)$"; then
+            needs_input="true"
+          fi
+          echo "{\"name\":\"$session_name\",\"sessionId\":\"$session_id\",\"tty\":\"$tty\",\"display\":\"$display_escaped\",\"status\":\"active\",\"needsInput\":$needs_input,\"cwd\":\"$cwd\"}"
         fi
       fi
     fi

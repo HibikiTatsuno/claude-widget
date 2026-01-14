@@ -1,10 +1,10 @@
 # claude-widget
 
-> macOS desktop widget for visualizing Claude Code usage statistics with Apple Liquid Glass design
+> macOS desktop widget for visualizing Claude Code usage statistics and GitHub PRs with Apple Liquid Glass design
 
 ## Overview
 
-claude-widget is a real-time desktop widget for macOS that displays Claude Code usage statistics. Built on Übersicht widget engine, it provides cost tracking, session management, and interactive features with a modern glass-morphism UI design.
+claude-widget is a real-time desktop widget for macOS that displays Claude Code usage statistics and GitHub Pull Requests. Built on Übersicht widget engine, it provides cost tracking, session management, GitHub PR monitoring, and interactive features with a modern glass-morphism UI design.
 
 ## Architecture
 
@@ -14,10 +14,13 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 ├─────────────────────────────────────────────────────────────┤
 │  Übersicht Widget Engine                                    │
 │  └── claude-sessions.jsx (UI Layer, 10s refresh)           │
+│      ├── Left Panel: Claude Usage & Sessions               │
+│      └── Right Panel: GitHub Pull Requests                 │
 │              ↓                                              │
 │  Cache Files (~/.claude/cache/)                            │
 │  ├── usage-30d.json (main data)                            │
-│  └── widget-hidden.flag (visibility state)                 │
+│  ├── widget-hidden.flag (visibility state)                 │
+│  └── pending-input/*.pending (notification flags)          │
 │              ↑                                              │
 │  launchd (com.claude.usage-cache.plist, 60s interval)      │
 │  └── update-usage-cache.sh (Data Collection Layer)         │
@@ -26,7 +29,8 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 │  ├── ccusage CLI (cost/token statistics)                   │
 │  ├── ~/.claude/history.jsonl (session history)             │
 │  ├── ~/.claude/projects/*/ (session files)                 │
-│  └── ps + lsof (active process detection)                  │
+│  ├── ps + lsof (active process detection)                  │
+│  └── gh CLI (GitHub PR data)                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -50,15 +54,27 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 - Completed sessions: Recently finished sessions (last 2 hours)
 - Session display names extracted from history
 - Project/working directory information
+- Bell notification indicator: Shows 🔔 when Claude needs user input (via hooks)
+
+### GitHub Pull Requests Panel
+- Real-time PR list for authenticated user (`gh pr list --author @me`)
+- Repository name with clickable link to GitHub
+- PR title with link to PR page
+- Mergeable status indicator (checkmark/X)
+- Review decision indicator (Approved/Changes Requested/Review Required)
+- Opens links in default browser
 
 ### Interactive Features
 - Clickable session IDs: Opens Ghostty terminal and resumes session with `claude --resume`
+- Clickable PR links: Opens GitHub in browser
 - Hide/Show widget: Toggle visibility with close (×) button and minimized state (C button)
 - Scrollable content for overflow handling
 
 ### UI Design
 - Apple Liquid Glass style with blur effects and gradients
-- Responsive sizing (25% width, 70% height of viewport)
+- Two-column layout (50% width, 70% height of viewport)
+- Left column: Claude usage statistics and sessions
+- Right column: GitHub Pull Requests
 - Dark mode optimized color scheme (#1a1a1a base)
 - Percentage-based layout for different screen sizes
 
@@ -91,7 +107,8 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
       "tty": "pts/0",
       "cwd": "/path/to/project",
       "display": "first line of session",
-      "status": "active"
+      "status": "active",
+      "needsInput": false
     }
   ],
   "completedSessions": [
@@ -116,6 +133,7 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 - ccusage CLI (`pnpm add -g ccusage`)
 - jq (JSON processor)
 - Claude Code CLI
+- gh CLI (GitHub CLI, `brew install gh`)
 
 ### Optional
 - Ghostty terminal (for session resume feature)
@@ -133,7 +151,8 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 
 ### Widget Settings (in claude-sessions.jsx)
 - Position: `bottom: 20px`, `left: 20px`
-- Size: `width: 25%`, `height: 70%`
+- Size: `width: 50%`, `height: 70%`
+- Layout: Two-column (left: Claude, right: GitHub PRs)
 - Refresh rate: `10000ms` (10 seconds)
 
 ### Background Script (in com.claude.usage-cache.plist)
@@ -143,16 +162,18 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 ## Key Functions
 
 ### claude-sessions.jsx
-- `command`: Shell command to read cache and hidden flag
-- `render()`: Main UI render function
+- `command`: Shell command to read cache, hidden flag, and GitHub PRs
+- `render()`: Main UI render function with two-column layout
 - `getBarColor()`: Color calculation for chart bars
 - `openSessionInGhostty()`: AppleScript-based terminal control
+- `openInBrowser()`: Opens URLs in default browser
 - `hideWidget()` / `showWidget()`: Visibility toggle
 
 ### update-usage-cache.sh
 - Session detection via process listing
 - History parsing with jq
 - Project directory scanning
+- Pending input detection (reads ~/.claude/cache/pending-input/)
 - Atomic cache file updates
 
 ## Limitations
