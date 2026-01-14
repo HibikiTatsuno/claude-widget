@@ -19,6 +19,11 @@
 - **コメント数** - 各PRのコメント数
 - クリックでPRまたはリポジトリをブラウザで開く
 
+### GitHub Activity
+- 30日間のコントリビューションをバーチャートで可視化
+- 週間サマリーバッジ（Commits / PRs / Reviews）
+- **注意**: 個人アカウントへの直接プッシュのみカウント（organization リポジトリは含まれない）
+
 ### UI機能
 - Apple Liquid Glass透明デザイン
 - 表示/非表示トグル（最小化ボタン）
@@ -47,6 +52,11 @@
 |  welself/jobmatching-web         |
 |  feat: SEO optimization... #1971 |
 |  [Review] [CI Pass] [💬 2]       |
++----------------------------------+
+| GitHub Activity                  |
+|  [Commits: 5] [PRs: 2] [Rev: 3] |
+|  30-day Contributions            |
+|  [||||||||||||||||||||||||]      |
 +----------------------------------+
 ```
 

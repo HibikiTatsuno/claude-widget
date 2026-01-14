@@ -15,7 +15,7 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 │  Übersicht Widget Engine                                    │
 │  └── claude-sessions.jsx (UI Layer, 10s refresh)           │
 │      ├── Left Panel: Claude Usage & Sessions               │
-│      └── Right Panel: GitHub Pull Requests                 │
+│      └── Right Panel: GitHub PRs & Activity                │
 │              ↓                                              │
 │  Cache Files (~/.claude/cache/)                            │
 │  ├── usage-30d.json (main data)                            │
@@ -30,7 +30,9 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 │  ├── ~/.claude/history.jsonl (session history)             │
 │  ├── ~/.claude/projects/*/ (session files)                 │
 │  ├── ps + lsof (active process detection)                  │
-│  └── gh CLI (GitHub PR data)                               │
+│  └── gh CLI GraphQL API                                    │
+│      ├── PR data (search query)                            │
+│      └── Contributions data (contributionsCollection)      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -60,9 +62,16 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 - Real-time PR list for authenticated user (`gh pr list --author @me`)
 - Repository name with clickable link to GitHub
 - PR title with link to PR page
-- Mergeable status indicator (checkmark/X)
 - Review decision indicator (Approved/Changes Requested/Review Required)
+- CI status indicator (Pass/Fail/Running/N/A)
+- Comment count badge
 - Opens links in default browser
+
+### GitHub Activity Panel
+- 30-day contribution bar chart with color-coded bars (green: recent, light green: older)
+- Weekly summary badges: Commits, PRs, Reviews
+- Uses GitHub GraphQL API (`contributionsCollection`)
+- **Note**: Only counts contributions to personal account (not organization repos)
 
 ### Interactive Features
 - Clickable session IDs: Opens Ghostty terminal and resumes session with `claude --resume`
@@ -72,11 +81,11 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 
 ### UI Design
 - Apple Liquid Glass style with blur effects and gradients
-- Two-column layout (50% width, 70% height of viewport)
-- Left column: Claude usage statistics and sessions
-- Right column: GitHub Pull Requests
+- Single-column scrollable layout (320px width, 70% height)
+- Sections: Claude usage chart, statistics, sessions, GitHub PRs, GitHub Activity
+- PR panel with max height (280px) and scroll for 5+ items
 - Dark mode optimized color scheme (#1a1a1a base)
-- Percentage-based layout for different screen sizes
+- Pastel-colored status badges with borders
 
 ## Data Flow
 
@@ -151,8 +160,8 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 
 ### Widget Settings (in claude-sessions.jsx)
 - Position: `bottom: 20px`, `left: 20px`
-- Size: `width: 50%`, `height: 70%`
-- Layout: Two-column (left: Claude, right: GitHub PRs)
+- Size: `width: 320px`, `height: 70%`
+- Layout: Single-column scrollable
 - Refresh rate: `10000ms` (10 seconds)
 
 ### Background Script (in com.claude.usage-cache.plist)
@@ -162,9 +171,11 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 ## Key Functions
 
 ### claude-sessions.jsx
-- `command`: Shell command to read cache, hidden flag, and GitHub PRs
+- `command`: Shell command to read cache, hidden flag, GitHub PRs, and contributions
 - `render()`: Main UI render function with two-column layout
-- `getBarColor()`: Color calculation for chart bars
+- `getBarColor()`: Color calculation for cost chart bars
+- `getReviewStatus()`: Returns review status info (label, colors) for PR badges
+- `getCIStatus()`: Returns CI status info (label, colors) for CI badges
 - `openSessionInGhostty()`: AppleScript-based terminal control
 - `openInBrowser()`: Opens URLs in default browser
 - `hideWidget()` / `showWidget()`: Visibility toggle
@@ -181,3 +192,5 @@ claude-widget is a real-time desktop widget for macOS that displays Claude Code 
 - Ghostty control uses AppleScript workaround (native API pending)
 - Session detection requires matching history entries
 - Active session detection excludes background processes (TTY != ??)
+- GitHub contributions only count pushes to personal account (organization repos not included)
+- Übersicht uses older JavaScript engine (no optional chaining `?.` support)
