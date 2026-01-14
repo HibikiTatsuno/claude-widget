@@ -4,25 +4,44 @@
 export PATH="/Users/hibiki.tatsuno/.volta/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
 
 CACHE_FILE="$HOME/.claude/cache/usage-30d.json"
+USAGE_CACHE_FILE="$HOME/.claude/cache/usage-data.json"
 HISTORY_FILE="$HOME/.claude/history.jsonl"
 SINCE_DATE=$(date -v-30d +%Y%m%d)
+USAGE_CACHE_TTL=60  # ccusageのキャッシュ有効期間（秒）
 
-# Get 30-day usage data
-USAGE_DATA=$(/Users/hibiki.tatsuno/Library/pnpm/ccusage daily --json --since "$SINCE_DATE" 2>/dev/null | \
-  jq '{
-    daily: [.daily[] | {date, totalCost, totalTokens}],
-    totals: .totals
-  }' 2>/dev/null)
+# ccusageのキャッシュが有効かチェック（60秒以内なら再利用）
+CURRENT_TIME=$(date +%s)
+USAGE_DATA=""
+
+if [ -f "$USAGE_CACHE_FILE" ]; then
+  CACHE_TIME=$(stat -f %m "$USAGE_CACHE_FILE" 2>/dev/null)
+  if [ -n "$CACHE_TIME" ] && [ $((CURRENT_TIME - CACHE_TIME)) -lt $USAGE_CACHE_TTL ]; then
+    # キャッシュが有効なので再利用
+    USAGE_DATA=$(cat "$USAGE_CACHE_FILE" 2>/dev/null)
+  fi
+fi
+
+# キャッシュがない or 期限切れの場合はccusageを実行
+if [ -z "$USAGE_DATA" ] || [ "$USAGE_DATA" = "null" ]; then
+  USAGE_DATA=$(/Users/hibiki.tatsuno/Library/pnpm/ccusage daily --json --since "$SINCE_DATE" 2>/dev/null | \
+    jq '{
+      daily: [.daily[] | {date, totalCost, totalTokens}],
+      totals: .totals
+    }' 2>/dev/null)
+  # キャッシュに保存
+  echo "$USAGE_DATA" > "$USAGE_CACHE_FILE"
+fi
 
 # Get session display names and IDs from history.jsonl (last 500 entries)
-# Group by sessionId and get the latest display for each
+# Group by sessionId and get the latest display for each (with timestamp for sorting)
 SESSION_DISPLAYS=$(tail -500 "$HISTORY_FILE" 2>/dev/null | jq -s '
   group_by(.sessionId) |
   map({
     key: .[0].sessionId,
     value: {
       display: (sort_by(.timestamp) | last | .display | split("\n")[0] | .[0:50]),
-      project: (sort_by(.timestamp) | last | .project)
+      project: (sort_by(.timestamp) | last | .project),
+      timestamp: (sort_by(.timestamp) | last | .timestamp)
     }
   }) |
   from_entries
@@ -41,6 +60,12 @@ ACTIVE_SESSIONS=$(ps aux | grep -E "[c]laude" | grep -v grep | while read -r lin
   tty=$(echo "$line" | awk '{print $7}')
 
   if [ "$tty" != "??" ] && [ -n "$pid" ]; then
+    # ゾンビプロセスをスキップ
+    state=$(ps -o state= -p "$pid" 2>/dev/null)
+    if [ "$state" = "Z" ]; then
+      continue
+    fi
+
     cwd=$(lsof -p "$pid" 2>/dev/null | grep cwd | head -1 | awk '{print $NF}')
     if [ -n "$cwd" ]; then
       session_name=$(basename "$cwd")
@@ -48,9 +73,9 @@ ACTIVE_SESSIONS=$(ps aux | grep -E "[c]laude" | grep -v grep | while read -r lin
         session_name="~"
       fi
 
-      # Get session ID and display from history by project path
+      # Get session ID and display from history by project path (sorted by timestamp)
       session_info=$(echo "$SESSION_DISPLAYS" | jq -r --arg cwd "$cwd" '
-        to_entries | map(select(.value.project == $cwd)) | sort_by(.key) | last |
+        to_entries | map(select(.value.project == $cwd)) | sort_by(.value.timestamp) | last |
         if . then "\(.key)|\(.value.display)" else "" end
       ' 2>/dev/null)
 
