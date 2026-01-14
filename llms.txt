@@ -1,0 +1,162 @@
+# claude-widget
+
+> macOS desktop widget for visualizing Claude Code usage statistics with Apple Liquid Glass design
+
+## Overview
+
+claude-widget is a real-time desktop widget for macOS that displays Claude Code usage statistics. Built on Übersicht widget engine, it provides cost tracking, session management, and interactive features with a modern glass-morphism UI design.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    macOS Desktop                            │
+├─────────────────────────────────────────────────────────────┤
+│  Übersicht Widget Engine                                    │
+│  └── claude-sessions.jsx (UI Layer, 10s refresh)           │
+│              ↓                                              │
+│  Cache Files (~/.claude/cache/)                            │
+│  ├── usage-30d.json (main data)                            │
+│  └── widget-hidden.flag (visibility state)                 │
+│              ↑                                              │
+│  launchd (com.claude.usage-cache.plist, 60s interval)      │
+│  └── update-usage-cache.sh (Data Collection Layer)         │
+│              ↓                                              │
+│  Data Sources                                               │
+│  ├── ccusage CLI (cost/token statistics)                   │
+│  ├── ~/.claude/history.jsonl (session history)             │
+│  ├── ~/.claude/projects/*/ (session files)                 │
+│  └── ps + lsof (active process detection)                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Files
+
+- `/claude-sessions.jsx`: Main widget UI component (JSX/React-like)
+- `/update-usage-cache.sh`: Background data collection script (Bash)
+- `/com.claude.usage-cache.plist`: launchd configuration for scheduled execution
+- `/README.md`: Installation and usage documentation
+
+## Features
+
+### Cost Visualization
+- 30-day cost bar chart with color-coded bars (red: high, orange: medium, blue: recent)
+- Daily cost labels for the last 7 days
+- Summary statistics: 30-day total, 7-day total, today's cost
+- Total token count with K/M suffix formatting
+
+### Session Management
+- Active sessions: Real-time detection of running Claude processes
+- Completed sessions: Recently finished sessions (last 2 hours)
+- Session display names extracted from history
+- Project/working directory information
+
+### Interactive Features
+- Clickable session IDs: Opens Ghostty terminal and resumes session with `claude --resume`
+- Hide/Show widget: Toggle visibility with close (×) button and minimized state (C button)
+- Scrollable content for overflow handling
+
+### UI Design
+- Apple Liquid Glass style with blur effects and gradients
+- Responsive sizing (25% width, 70% height of viewport)
+- Dark mode optimized color scheme (#1a1a1a base)
+- Percentage-based layout for different screen sizes
+
+## Data Flow
+
+1. **Collection (every 60s)**: `update-usage-cache.sh` runs via launchd
+   - Fetches cost/token data from `ccusage daily --json`
+   - Parses `~/.claude/history.jsonl` for session metadata
+   - Detects active processes via `ps aux` and `lsof`
+   - Scans `~/.claude/projects/*/` for completed sessions
+   - Writes combined JSON to `~/.claude/cache/usage-30d.json`
+
+2. **Display (every 10s)**: `claude-sessions.jsx` refreshes
+   - Reads cache file and hidden flag
+   - Renders UI with current data
+   - Handles user interactions
+
+## Cache Data Structure
+
+```json
+{
+  "daily": [
+    {"date": "2025-01-14", "totalCost": 0.05, "totalTokens": 5000}
+  ],
+  "totals": {"totalCost": 1.50, "totalTokens": 150000},
+  "activeSessions": [
+    {
+      "name": "project-name",
+      "sessionId": "uuid",
+      "tty": "pts/0",
+      "cwd": "/path/to/project",
+      "display": "first line of session",
+      "status": "active"
+    }
+  ],
+  "completedSessions": [
+    {
+      "name": "project-name",
+      "sessionId": "uuid",
+      "cwd": "/path/to/project",
+      "display": "first line of session",
+      "status": "completed",
+      "updatedAt": 1705234567
+    }
+  ],
+  "updated": "2025-01-14T12:00:00Z"
+}
+```
+
+## Dependencies
+
+### Required
+- macOS
+- Übersicht (widget engine)
+- ccusage CLI (`pnpm add -g ccusage`)
+- jq (JSON processor)
+- Claude Code CLI
+
+### Optional
+- Ghostty terminal (for session resume feature)
+- Volta (JavaScript runtime manager)
+
+## Installation
+
+1. Install Übersicht from https://tracesof.net/uebersicht/
+2. Copy `claude-sessions.jsx` to `~/Library/Application Support/Übersicht/widgets/`
+3. Copy `update-usage-cache.sh` to `~/.claude/cache/`
+4. Copy `com.claude.usage-cache.plist` to `~/Library/LaunchAgents/`
+5. Load the launch agent: `launchctl load ~/Library/LaunchAgents/com.claude.usage-cache.plist`
+
+## Configuration
+
+### Widget Settings (in claude-sessions.jsx)
+- Position: `bottom: 20px`, `left: 20px`
+- Size: `width: 25%`, `height: 70%`
+- Refresh rate: `10000ms` (10 seconds)
+
+### Background Script (in com.claude.usage-cache.plist)
+- Execution interval: `60` seconds
+- Log output: `~/.claude/cache/update.log`
+
+## Key Functions
+
+### claude-sessions.jsx
+- `command`: Shell command to read cache and hidden flag
+- `render()`: Main UI render function
+- `getBarColor()`: Color calculation for chart bars
+- `openSessionInGhostty()`: AppleScript-based terminal control
+- `hideWidget()` / `showWidget()`: Visibility toggle
+
+### update-usage-cache.sh
+- Session detection via process listing
+- History parsing with jq
+- Project directory scanning
+- Atomic cache file updates
+
+## Limitations
+
+- Ghostty control uses AppleScript workaround (native API pending)
+- Session detection requires matching history entries
+- Active session detection excludes background processes (TTY != ??)
