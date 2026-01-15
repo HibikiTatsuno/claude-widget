@@ -6,7 +6,7 @@ import { run } from "uebersicht";
 // Read from cache file (updated periodically by launchd)
 // Also check hidden flag file to persist hide/show state
 // Fetch GitHub PRs using gh CLI
-export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'; echo "---CONTRIBUTIONS---"; FROM_DATE=$(date -v-30d -u +"%Y-%m-%dT00:00:00Z"); TO_DATE=$(date -u +"%Y-%m-%dT23:59:59Z"); /opt/homebrew/bin/gh api graphql -f query="query { viewer { contributionsCollection(from: \\"$FROM_DATE\\", to: \\"$TO_DATE\\") { totalCommitContributions totalPullRequestContributions totalPullRequestReviewContributions contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } } } } }" 2>/dev/null || echo '{}'`;
+export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'; echo "---CONTRIBUTIONS---"; cat ~/.claude/cache/github-activity.json 2>/dev/null || echo '{}'`;
 
 /**
  * Opens a new Ghostty terminal, navigates to the session directory, and resumes the Claude session.
@@ -477,10 +477,9 @@ export const render = ({ output }) => {
   let isHidden = false;
   let githubPRs = [];
   let contributions = {
-    totalCommits: 0,
-    totalPRs: 0,
-    totalReviews: 0,
-    daily: [],
+    monthly: [],
+    weekly: { commits: 0, prs: 0, welselfCommits: 0, personalCommits: 0, welselfPRs: 0, personalPRs: 0 },
+    updatedAt: "",
   };
 
   // コマンド出力をパースして、使用状況データと非表示フラグとGitHub PRとコントリビューションを取得
@@ -550,35 +549,12 @@ export const render = ({ output }) => {
   }
 
   // GitHub Contributionsデータをパース
-  // 注意: GitHubのcontribution graphは個人アカウントへの直接プッシュのみカウントされる
-  // organization（会社のリポジトリ等）へのコントリビューションは含まれない
+  // 月ごと・週ごとのwelselfと個人リポジトリのコミット数・PR数を取得
   try {
     const contribResponse = JSON.parse(contributionsPart);
-    if (
-      contribResponse.data &&
-      contribResponse.data.viewer &&
-      contribResponse.data.viewer.contributionsCollection
-    ) {
-      const cc = contribResponse.data.viewer.contributionsCollection;
-      contributions.totalCommits = cc.totalCommitContributions || 0;
-      contributions.totalPRs = cc.totalPullRequestContributions || 0;
-      contributions.totalReviews = cc.totalPullRequestReviewContributions || 0;
-
-      // 日別データを抽出（直近30日）
-      if (cc.contributionCalendar && cc.contributionCalendar.weeks) {
-        const allDays = [];
-        cc.contributionCalendar.weeks.forEach((week) => {
-          week.contributionDays.forEach((day) => {
-            allDays.push({
-              date: day.date,
-              count: day.contributionCount,
-            });
-          });
-        });
-        // 直近30日を取得
-        contributions.daily = allDays.slice(-30);
-      }
-    }
+    contributions.monthly = contribResponse.monthly || [];
+    contributions.weekly = contribResponse.weekly || contributions.weekly;
+    contributions.updatedAt = contribResponse.updatedAt || "";
   } catch (e) {
     // Contributions JSON parse failed
   }
@@ -1051,7 +1027,7 @@ export const render = ({ output }) => {
             )}
           </div>
 
-          {/* GitHub Contributions */}
+          {/* GitHub Contributions - Monthly Bar Chart */}
           <div
             style={{
               padding: "14px",
@@ -1065,118 +1041,177 @@ export const render = ({ output }) => {
                 fontSize: "14px",
                 fontWeight: "600",
                 color: "#1a1a1a",
-                marginBottom: "12px",
+                marginBottom: "10px",
               }}
             >
               GitHub Activity
             </div>
 
-            {/* Weekly Summary */}
+            {/* This Week Stats */}
             <div
               style={{
                 display: "flex",
                 gap: "8px",
                 marginBottom: "12px",
-                flexWrap: "wrap",
               }}
             >
               <div
                 style={{
-                  padding: "4px 10px",
-                  borderRadius: "8px",
-                  background: "#dbeafe",
-                  color: "#1e40af",
-                  fontSize: "10px",
-                  fontWeight: "600",
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+                  textAlign: "center",
                 }}
               >
-                Commits: {contributions.totalCommits}
+                <div style={{ fontSize: "8px", color: "#1e40af", marginBottom: "2px", fontWeight: "500" }}>
+                  This Week
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: "700", color: "#1e40af" }}>
+                  {contributions.weekly.commits}
+                </div>
+                <div style={{ fontSize: "9px", color: "#3b82f6" }}>commits</div>
               </div>
               <div
                 style={{
-                  padding: "4px 10px",
-                  borderRadius: "8px",
-                  background: "#dcfce7",
-                  color: "#166534",
-                  fontSize: "10px",
-                  fontWeight: "600",
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(135deg, #fef3c7, #fde68a)",
+                  textAlign: "center",
                 }}
               >
-                PRs: {contributions.totalPRs}
-              </div>
-              <div
-                style={{
-                  padding: "4px 10px",
-                  borderRadius: "8px",
-                  background: "#fef3c7",
-                  color: "#92400e",
-                  fontSize: "10px",
-                  fontWeight: "600",
-                }}
-              >
-                Reviews: {contributions.totalReviews}
+                <div style={{ fontSize: "8px", color: "#92400e", marginBottom: "2px", fontWeight: "500" }}>
+                  This Week
+                </div>
+                <div style={{ fontSize: "20px", fontWeight: "700", color: "#92400e" }}>
+                  {contributions.weekly.prs}
+                </div>
+                <div style={{ fontSize: "9px", color: "#d97706" }}>PRs</div>
               </div>
             </div>
 
-            {/* 30-day Bar Chart */}
+            {/* Monthly Chart Header */}
             <div
               style={{
                 fontSize: "10px",
-                color: "#666666",
+                color: "#666",
                 marginBottom: "6px",
+                fontWeight: "500",
               }}
             >
-              30-day Contributions
+              Past 6 Months
             </div>
+
+            {/* Monthly Bar Chart */}
             <div
               style={{
                 display: "flex",
                 alignItems: "flex-end",
-                height: "50px",
-                gap: "2px",
+                height: "70px",
+                gap: "4px",
+                marginBottom: "2px",
               }}
             >
-              {contributions.daily.map((day, index) => {
-                const maxCount = Math.max(
-                  ...contributions.daily.map((d) => d.count),
-                  1,
-                );
-                const height = Math.max(
-                  (day.count / maxCount) * 100,
-                  day.count > 0 ? 10 : 2,
-                );
-                const isRecent = index >= contributions.daily.length - 7;
+              {contributions.monthly.map((m) => {
+                const maxCommits = Math.max(...contributions.monthly.map((x) => x.welselfCommits + x.personalCommits), 1);
+                const maxPRs = Math.max(...contributions.monthly.map((x) => x.welselfPRs + x.personalPRs), 1);
+                const maxValue = Math.max(maxCommits, maxPRs);
+                const totalCommits = m.welselfCommits + m.personalCommits;
+                const totalPRs = m.welselfPRs + m.personalPRs;
+                const commitHeight = (totalCommits / maxValue) * 100;
+                const prHeight = (totalPRs / maxValue) * 100;
                 return (
                   <div
-                    key={day.date}
+                    key={m.month}
                     style={{
                       flex: 1,
-                      height: `${height}%`,
-                      background:
-                        day.count > 0
-                          ? isRecent
-                            ? "#22c55e"
-                            : "#86efac"
-                          : "#e5e7eb",
-                      borderRadius: "2px 2px 0 0",
-                      minWidth: "4px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      height: "100%",
+                      justifyContent: "flex-end",
                     }}
-                    title={`${day.date}: ${day.count} contributions`}
-                  />
+                  >
+                    {/* Numbers above bars */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "1px",
+                        marginBottom: "2px",
+                        fontSize: "7px",
+                        fontWeight: "600",
+                      }}
+                    >
+                      <span style={{ color: "#3b82f6" }}>{totalCommits}</span>
+                      <span style={{ color: "#999" }}>/</span>
+                      <span style={{ color: "#f59e0b" }}>{totalPRs}</span>
+                    </div>
+                    {/* Bars */}
+                    <div style={{ display: "flex", gap: "1px", alignItems: "flex-end", flex: 1 }}>
+                      <div
+                        style={{
+                          width: "10px",
+                          height: `${Math.max(commitHeight, 3)}%`,
+                          background: "linear-gradient(180deg, #3b82f6, #60a5fa)",
+                          borderRadius: "2px 2px 0 0",
+                        }}
+                        title={`Commits: ${totalCommits}`}
+                      />
+                      <div
+                        style={{
+                          width: "10px",
+                          height: `${Math.max(prHeight, 3)}%`,
+                          background: "linear-gradient(180deg, #f59e0b, #fbbf24)",
+                          borderRadius: "2px 2px 0 0",
+                        }}
+                        title={`PRs: ${totalPRs}`}
+                      />
+                    </div>
+                  </div>
                 );
               })}
             </div>
+
+            {/* Month Labels */}
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
-                fontSize: "8px",
-                color: "#9ca3af",
-                marginTop: "4px",
+                gap: "4px",
               }}
             >
-              <span>30 days ago</span>
-              <span>Today</span>
+              {contributions.monthly.map((m) => (
+                <div
+                  key={m.month}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    fontSize: "8px",
+                    color: "#666",
+                  }}
+                >
+                  {m.month.slice(5)}
+                </div>
+              ))}
+            </div>
+
+            {/* Legend */}
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                marginTop: "8px",
+                justifyContent: "center",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#3b82f6" }} />
+                <span style={{ fontSize: "9px", color: "#666" }}>Commits</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: "#f59e0b" }} />
+                <span style={{ fontSize: "9px", color: "#666" }}>PRs</span>
+              </div>
             </div>
           </div>
         </div>
