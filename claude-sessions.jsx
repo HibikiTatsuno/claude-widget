@@ -2,11 +2,20 @@
 // Displays 30-day usage data with Apple Liquid Glass design
 
 import { run } from "uebersicht";
+import {
+  formatCost,
+  formatTokens,
+  formatResetTime,
+  getUsageColor,
+  formatSessionId,
+  getReviewStatus,
+  getCIStatus,
+} from "./utils.js";
 
 // Read from cache file (updated periodically by launchd)
 // Also check hidden flag file to persist hide/show state
 // Fetch GitHub PRs using gh CLI
-export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'; echo "---CONTRIBUTIONS---"; cat ~/.claude/cache/github-activity.json 2>/dev/null || echo '{}'; echo "---REVIEWER_PRS---"; cat ~/.claude/cache/reviewer-prs.json 2>/dev/null || echo '{}'`;
+export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'; echo "---CONTRIBUTIONS---"; cat ~/.claude/cache/github-activity.json 2>/dev/null || echo '{}'; echo "---REVIEWER_PRS---"; cat ~/.claude/cache/reviewer-prs.json 2>/dev/null || echo '{}'; echo "---CLAUDE_USAGE---"; cat ~/.claude/cache/claude-usage.json 2>/dev/null || echo '{}'`;
 
 /**
  * Opens a new Ghostty terminal, navigates to the session directory, and resumes the Claude session.
@@ -386,88 +395,7 @@ const minimizedContainerStyle = {
   pointerEvents: "auto",
 };
 
-const formatCost = (cost) => `$${cost.toFixed(2)}`;
-const formatTokens = (tokens) => {
-  if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
-  if (tokens >= 1000) return `${(tokens / 1000).toFixed(0)}K`;
-  return tokens.toString();
-};
-
-const formatSessionId = (id) => {
-  if (!id) return "";
-  return id.substring(0, 8);
-};
-
-/**
- * Returns review status info with emoji, label, text color, and background color.
- * @param {string|null} reviewDecision - The review decision from GitHub API
- * @returns {{emoji: string, label: string, textColor: string, bgColor: string}|null} Status info or null
- */
-const getReviewStatus = (reviewDecision) => {
-  switch (reviewDecision) {
-    case "APPROVED":
-      return {
-        label: "Approved",
-        textColor: "#166534",
-        bgColor: "#dcfce7",
-        borderColor: "#86efac",
-      };
-    case "CHANGES_REQUESTED":
-      return {
-        label: "Changes",
-        textColor: "#991b1b",
-        bgColor: "#fee2e2",
-        borderColor: "#fca5a5",
-      };
-    case "REVIEW_REQUIRED":
-      return {
-        label: "Review",
-        textColor: "#9a3412",
-        bgColor: "#ffedd5",
-        borderColor: "#fdba74",
-      };
-    default:
-      return null;
-  }
-};
-
-/**
- * Returns CI status info with label, colors.
- * @param {string|null} ciStatus - The CI status from GitHub API
- * @returns {{label: string, textColor: string, bgColor: string, borderColor: string}|null}
- */
-const getCIStatus = (ciStatus) => {
-  switch (ciStatus) {
-    case "SUCCESS":
-      return {
-        label: "CI Pass",
-        textColor: "#0e7490",
-        bgColor: "#cffafe",
-        borderColor: "#67e8f9",
-      };
-    case "FAILURE":
-      return {
-        label: "CI Fail",
-        textColor: "#be185d",
-        bgColor: "#fce7f3",
-        borderColor: "#f9a8d4",
-      };
-    case "PENDING":
-      return {
-        label: "CI Running",
-        textColor: "#6b21a8",
-        bgColor: "#f3e8ff",
-        borderColor: "#d8b4fe",
-      };
-    default:
-      return {
-        label: "CI N/A",
-        textColor: "#4b5563",
-        bgColor: "#f3f4f6",
-        borderColor: "#d1d5db",
-      };
-  }
-};
+// Utility functions are now imported from utils.js
 
 export const render = ({ output }) => {
   let data = [];
@@ -481,6 +409,11 @@ export const render = ({ output }) => {
     monthly: [],
     weekly: { commits: 0, prs: 0, welselfCommits: 0, personalCommits: 0, welselfPRs: 0, personalPRs: 0 },
     updatedAt: "",
+  };
+  let claudeUsage = {
+    fiveHour: { utilization: 0, resetsAt: null },
+    sevenDay: { utilization: 0, resetsAt: null },
+    sevenDaySonnet: { utilization: 0, resetsAt: null },
   };
 
   // コマンド出力をパースして、使用状況データと非表示フラグとGitHub PRとコントリビューションとレビュー待ちPRを取得
@@ -499,8 +432,13 @@ export const render = ({ output }) => {
   const contributionsPart = reviewerSplit[0]
     ? reviewerSplit[0].trim()
     : "{}";
-  const reviewerPart = reviewerSplit[1]
-    ? reviewerSplit[1].trim()
+  const afterReviewer = reviewerSplit[1] || "";
+  const claudeUsageSplit = afterReviewer.split("---CLAUDE_USAGE---");
+  const reviewerPart = claudeUsageSplit[0]
+    ? claudeUsageSplit[0].trim()
+    : "{}";
+  const claudeUsagePart = claudeUsageSplit[1]
+    ? claudeUsageSplit[1].trim()
     : "{}";
   isHidden = hiddenPart === "true";
 
@@ -602,6 +540,31 @@ export const render = ({ output }) => {
     // Reviewer PRs JSON parse failed
   }
 
+  // Claude使用量データをパース
+  try {
+    const usageResponse = JSON.parse(claudeUsagePart);
+    if (usageResponse.five_hour) {
+      claudeUsage.fiveHour = {
+        utilization: usageResponse.five_hour.utilization || 0,
+        resetsAt: usageResponse.five_hour.resets_at || null,
+      };
+    }
+    if (usageResponse.seven_day) {
+      claudeUsage.sevenDay = {
+        utilization: usageResponse.seven_day.utilization || 0,
+        resetsAt: usageResponse.seven_day.resets_at || null,
+      };
+    }
+    if (usageResponse.seven_day_sonnet) {
+      claudeUsage.sevenDaySonnet = {
+        utilization: usageResponse.seven_day_sonnet.utilization || 0,
+        resetsAt: usageResponse.seven_day_sonnet.resets_at || null,
+      };
+    }
+  } catch (e) {
+    // Claude usage JSON parse failed
+  }
+
   // 非表示状態の場合、最小化されたボタンを表示
   if (isHidden) {
     return (
@@ -688,6 +651,82 @@ export const render = ({ output }) => {
                 overflow: "hidden",
               }}
             >
+              {/* Claude Usage Limits */}
+              <div
+                style={{
+                  padding: "12px",
+                  background: "rgba(255, 255, 255, 0.5)",
+                  borderRadius: "16px",
+                  border: "1px solid rgba(255, 255, 255, 0.7)",
+                }}
+              >
+                <div style={{ fontSize: "11px", fontWeight: "600", color: "#1a1a1a", marginBottom: "10px" }}>
+                  Usage Limits
+                </div>
+                {/* Weekly All Models */}
+                <div style={{ marginBottom: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "10px", color: "#555" }}>Week</span>
+                    <span style={{ fontSize: "10px", color: "#666" }}>
+                      {claudeUsage.sevenDay.utilization}% {claudeUsage.sevenDay.resetsAt && `- ${formatResetTime(claudeUsage.sevenDay.resetsAt)}`}
+                    </span>
+                  </div>
+                  <div style={{ height: "6px", background: "rgba(0,0,0,0.1)", borderRadius: "3px", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${Math.min(claudeUsage.sevenDay.utilization, 100)}%`,
+                        height: "100%",
+                        background: getUsageColor(claudeUsage.sevenDay.utilization),
+                        borderRadius: "3px",
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+                {/* Weekly Sonnet */}
+                {claudeUsage.sevenDaySonnet.resetsAt && (
+                  <div style={{ marginBottom: "8px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <span style={{ fontSize: "10px", color: "#555" }}>Week (Sonnet)</span>
+                      <span style={{ fontSize: "10px", color: "#666" }}>
+                        {claudeUsage.sevenDaySonnet.utilization}% - {formatResetTime(claudeUsage.sevenDaySonnet.resetsAt)}
+                      </span>
+                    </div>
+                    <div style={{ height: "6px", background: "rgba(0,0,0,0.1)", borderRadius: "3px", overflow: "hidden" }}>
+                      <div
+                        style={{
+                          width: `${Math.min(claudeUsage.sevenDaySonnet.utilization, 100)}%`,
+                          height: "100%",
+                          background: getUsageColor(claudeUsage.sevenDaySonnet.utilization),
+                          borderRadius: "3px",
+                          transition: "width 0.3s ease",
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {/* 5-Hour Session */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "10px", color: "#555" }}>Session (5h)</span>
+                    <span style={{ fontSize: "10px", color: "#666" }}>
+                      {claudeUsage.fiveHour.utilization}% {claudeUsage.fiveHour.resetsAt && `- ${formatResetTime(claudeUsage.fiveHour.resetsAt)}`}
+                    </span>
+                  </div>
+                  <div style={{ height: "6px", background: "rgba(0,0,0,0.1)", borderRadius: "3px", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${Math.min(claudeUsage.fiveHour.utilization, 100)}%`,
+                        height: "100%",
+                        background: getUsageColor(claudeUsage.fiveHour.utilization),
+                        borderRadius: "3px",
+                        transition: "width 0.3s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div style={chartWrapperStyle}>
                 <div style={costDisplayStyle}>
                   <div style={costValueStyle}>

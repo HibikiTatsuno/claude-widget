@@ -1,0 +1,21 @@
+{
+  "name": "claude-widget",
+  "version": "1.0.0",
+  "description": "Ubersicht widget for displaying Claude Code usage statistics and GitHub PR information",
+  "type": "module",
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  },
+  "keywords": [
+    "ubersicht",
+    "widget",
+    "claude",
+    "github"
+  ],
+  "license": "MIT"
+}

@@ -206,3 +206,20 @@ echo "$USAGE_DATA" | jq \
 if [ -s "$CACHE_FILE.tmp" ]; then
   mv "$CACHE_FILE.tmp" "$CACHE_FILE"
 fi
+
+# Fetch Claude usage limits from API
+CLAUDE_USAGE_CACHE="$HOME/.claude/cache/claude-usage.json"
+CREDENTIALS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+if [ -n "$CREDENTIALS" ]; then
+  ACCESS_TOKEN=$(echo "$CREDENTIALS" | jq -r '.claudeAiOauth.accessToken' 2>/dev/null)
+  if [ -n "$ACCESS_TOKEN" ] && [ "$ACCESS_TOKEN" != "null" ]; then
+    USAGE_RESPONSE=$(curl -s -X GET "https://api.anthropic.com/api/oauth/usage" \
+      -H "Accept: application/json" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $ACCESS_TOKEN" \
+      -H "anthropic-beta: oauth-2025-04-20")
+    if [ -n "$USAGE_RESPONSE" ]; then
+      echo "$USAGE_RESPONSE" > "$CLAUDE_USAGE_CACHE"
+    fi
+  fi
+fi
