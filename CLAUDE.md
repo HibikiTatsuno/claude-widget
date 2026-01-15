@@ -4,31 +4,40 @@
 
 ## Development Rules
 
-### IMPORTANT: Auto-Deploy After Changes
+### Development Flow
 
-**Every time you modify `claude-sessions.jsx`, you MUST immediately run the deploy script:**
+1. Edit source code in `src/` directory (TypeScript/TSX)
+2. Build to generate `dist/claude-sessions.jsx`
+3. Deploy to Übersicht widgets folder
+4. Übersicht restarts and reflects changes
 
-```bash
-~/.claude/scripts/deploy-widget.sh
-```
+### Build and Deploy
 
-This is REQUIRED because the widget file in this directory is NOT directly used by Übersicht. The deploy script copies the file to Übersicht's widgets folder and restarts Übersicht.
-
-**DO NOT forget to run the deploy script after any changes to `claude-sessions.jsx`.**
-
-### Deploy Script Location
+**After modifying source code, run:**
 
 ```bash
-~/.claude/scripts/deploy-widget.sh
+npm run deploy
 ```
 
-This script:
-1. Copies `claude-sessions.jsx` to `~/Library/Application Support/Übersicht/widgets/`
-2. Restarts Übersicht to apply changes
+This command:
+1. Builds `src/index.tsx` → `dist/claude-sessions.jsx` (esbuild)
+2. Copies the built file to `~/Library/Application Support/Übersicht/widgets/`
+3. Restarts Übersicht to apply changes
+
+### Available Commands
+
+```bash
+npm run build      # Build only (no deploy)
+npm run deploy     # Build and deploy to Übersicht
+npm run dev        # Watch mode (auto-rebuild on changes)
+npm run test       # Run tests in watch mode
+npm run test:run   # Run tests once
+npm run typecheck  # TypeScript type checking
+```
 
 ### Auto-Deploy (Watch Mode)
 
-To automatically deploy when files change, run:
+To automatically deploy when files change:
 
 ```bash
 ~/.claude/scripts/watch-widget.sh
@@ -38,9 +47,16 @@ This uses `fswatch` to monitor changes and auto-deploy. Press Ctrl+C to stop.
 
 ### File Structure
 
-- `claude-sessions.jsx` - Main widget source code
-- `update-usage-cache.sh` - Script to update usage cache (run by launchd)
-- `com.claude.usage-cache.plist` - launchd configuration
+```
+src/
+  index.tsx           # Main entry point (widget definition)
+  features/           # Feature modules (GitHub PRs, Activity, etc.)
+  shared/             # Shared components and utilities
+  infrastructure/     # External integrations (file reading, commands)
+  types/              # TypeScript type definitions
+dist/
+  claude-sessions.jsx # Built widget file (generated, do not edit)
+```
 
 ### Widget Features
 
@@ -59,3 +75,4 @@ This uses `fswatch` to monitor changes and auto-deploy. Press Ctrl+C to stop.
 - The widget reads from `~/.claude/cache/usage-30d.json`
 - GitHub data is fetched via `gh api graphql`
 - Widget refreshes every 10 seconds
+- **DO NOT edit `dist/claude-sessions.jsx` directly** - it is generated from source
