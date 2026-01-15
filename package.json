@@ -4,11 +4,19 @@
   "description": "Ubersicht widget for displaying Claude Code usage statistics and GitHub PR information",
   "type": "module",
   "scripts": {
+    "build": "esbuild src/index.tsx --bundle --outfile=dist/claude-sessions.jsx --format=esm --external:uebersicht --loader:.tsx=tsx --jsx=automatic --jsx-import-source=preact",
+    "dev": "npm run build -- --watch",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "deploy": "npm run build && ~/.claude/scripts/deploy-widget.sh",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
+    "preact": "^10.25.0",
+    "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   },
   "keywords": [

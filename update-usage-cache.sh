@@ -158,7 +158,25 @@ for dir in "$PROJECTS_DIR"/*; do
           if [ -z "$project_path" ]; then
             # Try to decode from directory name
             dir_name=$(basename "$dir")
-            project_path=$(echo "$dir_name" | sed 's/-/\//g')
+            # ディレクトリ名をパスに変換（-Users-hibiki-tatsuno-xxx -> /Users/hibiki.tatsuno/xxx）
+            # 先頭の-を/に、残りの-を/に変換して、/Users/xxx/yyy 形式を /Users/xxx.yyy に修正
+            decoded=$(echo "$dir_name" | sed 's/^-/\//' | sed 's/-/\//g')
+            # ユーザー名部分を.で結合してパスが存在するか確認
+            # /Users/hibiki/tatsuno/xxx を /Users/hibiki.tatsuno/xxx に変換
+            candidate=$(echo "$decoded" | sed 's|^/Users/\([^/]*\)/\([^/]*\)/|/Users/\1.\2/|')
+            if [ -d "$candidate" ]; then
+              project_path="$candidate"
+            else
+              # それでも見つからない場合、ホームディレクトリ配下を探す
+              # /Users/hibiki.tatsuno/claude-widget のようなパスを探す
+              basename_guess=$(echo "$dir_name" | sed 's/.*-tatsuno-//' | sed 's/-.*$//')
+              found_path=$(find "$HOME" -maxdepth 1 -type d -name "*$basename_guess*" 2>/dev/null | head -1)
+              if [ -n "$found_path" ]; then
+                project_path="$found_path"
+              else
+                project_path="$candidate"
+              fi
+            fi
           fi
 
           session_name=$(basename "$project_path" 2>/dev/null)
@@ -176,7 +194,8 @@ for dir in "$PROJECTS_DIR"/*; do
               --arg id "$session_id" \
               --arg time "$file_time" \
               --arg display "$display_escaped" \
-              '. + [{name: $name, sessionId: $id, updatedAt: ($time | tonumber), display: $display, status: "completed"}]' 2>/dev/null)
+              --arg cwd "$project_path" \
+              '. + [{name: $name, sessionId: $id, updatedAt: ($time | tonumber), display: $display, status: "completed", cwd: $cwd}]' 2>/dev/null)
           fi
         fi
       fi
