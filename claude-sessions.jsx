@@ -6,7 +6,7 @@ import { run } from "uebersicht";
 // Read from cache file (updated periodically by launchd)
 // Also check hidden flag file to persist hide/show state
 // Fetch GitHub PRs using gh CLI
-export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'; echo "---CONTRIBUTIONS---"; cat ~/.claude/cache/github-activity.json 2>/dev/null || echo '{}'`;
+export const command = `cat ~/.claude/cache/usage-30d.json 2>/dev/null || echo '{}'; echo "---HIDDEN---"; [ -f ~/.claude/cache/widget-hidden.flag ] && echo "true" || echo "false"; echo "---GITHUB---"; /opt/homebrew/bin/gh api graphql -f query='query { search(query: "is:open is:pr author:@me", type: ISSUE, first: 20) { edges { node { ... on PullRequest { number title url reviewDecision comments { totalCount } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } repository { nameWithOwner } } } } } }' 2>/dev/null || echo '{}'; echo "---CONTRIBUTIONS---"; cat ~/.claude/cache/github-activity.json 2>/dev/null || echo '{}'; echo "---REVIEWER_PRS---"; cat ~/.claude/cache/reviewer-prs.json 2>/dev/null || echo '{}'`;
 
 /**
  * Opens a new Ghostty terminal, navigates to the session directory, and resumes the Claude session.
@@ -476,13 +476,14 @@ export const render = ({ output }) => {
   let completedSessions = [];
   let isHidden = false;
   let githubPRs = [];
+  let reviewerPRs = [];
   let contributions = {
     monthly: [],
     weekly: { commits: 0, prs: 0, welselfCommits: 0, personalCommits: 0, welselfPRs: 0, personalPRs: 0 },
     updatedAt: "",
   };
 
-  // コマンド出力をパースして、使用状況データと非表示フラグとGitHub PRとコントリビューションを取得
+  // コマンド出力をパースして、使用状況データと非表示フラグとGitHub PRとコントリビューションとレビュー待ちPRを取得
   const hiddenSplit = output.split("---HIDDEN---");
   const jsonPart = hiddenSplit[0].trim();
   const afterHidden = hiddenSplit[1] || "";
@@ -493,8 +494,13 @@ export const render = ({ output }) => {
   const githubPart = contributionsSplit[0]
     ? contributionsSplit[0].trim()
     : "{}";
-  const contributionsPart = contributionsSplit[1]
-    ? contributionsSplit[1].trim()
+  const afterContributions = contributionsSplit[1] || "";
+  const reviewerSplit = afterContributions.split("---REVIEWER_PRS---");
+  const contributionsPart = reviewerSplit[0]
+    ? reviewerSplit[0].trim()
+    : "{}";
+  const reviewerPart = reviewerSplit[1]
+    ? reviewerSplit[1].trim()
     : "{}";
   isHidden = hiddenPart === "true";
 
@@ -557,6 +563,43 @@ export const render = ({ output }) => {
     contributions.updatedAt = contribResponse.updatedAt || "";
   } catch (e) {
     // Contributions JSON parse failed
+  }
+
+  // Reviewer PRsデータをパース（レビュー依頼されているPR）
+  try {
+    const reviewerResponse = JSON.parse(reviewerPart);
+    if (
+      reviewerResponse.data &&
+      reviewerResponse.data.search &&
+      reviewerResponse.data.search.edges
+    ) {
+      reviewerPRs = reviewerResponse.data.search.edges.map((edge) => {
+        const repo = edge.node.repository || {};
+        const nameWithOwner = repo.nameWithOwner || "";
+        const comments = edge.node.comments || {};
+        const commits = edge.node.commits || {};
+        const lastCommit = (commits.nodes && commits.nodes[0]) || {};
+        const statusCheckRollup =
+          (lastCommit.commit && lastCommit.commit.statusCheckRollup) || {};
+        const author = edge.node.author || {};
+        return {
+          number: edge.node.number,
+          title: edge.node.title,
+          url: edge.node.url,
+          author: author.login || "unknown",
+          reviewDecision: edge.node.reviewDecision,
+          commentCount: comments.totalCount || 0,
+          ciStatus: statusCheckRollup.state || null,
+          repository: {
+            nameWithOwner: nameWithOwner,
+            name: nameWithOwner ? nameWithOwner.split("/")[1] : "",
+          },
+          createdAt: edge.node.createdAt,
+        };
+      });
+    }
+  } catch (e) {
+    // Reviewer PRs JSON parse failed
   }
 
   // 非表示状態の場合、最小化されたボタンを表示
@@ -1024,6 +1067,118 @@ export const render = ({ output }) => {
               </div>
             ) : (
               <div style={prEmptyStyle}>No open pull requests</div>
+            )}
+          </div>
+
+          {/* Review Requests - PRs where user is requested as reviewer */}
+          <div style={prPanelStyle}>
+            <div style={prTitleStyle}>Review Requests ({reviewerPRs.length})</div>
+            {reviewerPRs.length > 0 ? (
+              <div style={{ overflowY: "auto", overflowX: "hidden" }}>
+                {reviewerPRs.map((pr, index) => {
+                  const repoUrl = getRepoUrl(pr);
+                  const repoName = getRepoName(pr);
+
+                  return (
+                    <div
+                      key={`reviewer-pr-${pr.number}-${index}`}
+                      style={{
+                        ...prItemStyle,
+                        borderBottom:
+                          index === reviewerPRs.length - 1
+                            ? "none"
+                            : prItemStyle.borderBottom,
+                      }}
+                    >
+                      <div
+                        style={prRepoStyle}
+                        onClick={() => openInBrowser(repoUrl)}
+                        title={`Open repository: ${repoName}`}
+                      >
+                        {repoName}
+                      </div>
+                      <div
+                        style={prTitleLinkStyle}
+                        onClick={() => openInBrowser(pr.url)}
+                        title={`Open PR: ${pr.title}`}
+                      >
+                        <span
+                          style={{
+                            flex: 1,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {pr.title}
+                        </span>
+                        <span style={prNumberStyle}>#{pr.number}</span>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          marginTop: "4px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "2px 8px",
+                            borderRadius: "10px",
+                            fontSize: "9px",
+                            fontWeight: "600",
+                            background: "#f3f4f6",
+                            color: "#374151",
+                            border: "1px solid #d1d5db",
+                          }}
+                        >
+                          @{pr.author}
+                        </div>
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "2px 8px",
+                            borderRadius: "10px",
+                            fontSize: "9px",
+                            fontWeight: "600",
+                            background: getCIStatus(pr.ciStatus).bgColor,
+                            color: getCIStatus(pr.ciStatus).textColor,
+                            border:
+                              "1px solid " +
+                              getCIStatus(pr.ciStatus).borderColor,
+                          }}
+                        >
+                          {getCIStatus(pr.ciStatus).label}
+                        </div>
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            padding: "2px 8px",
+                            borderRadius: "10px",
+                            fontSize: "9px",
+                            fontWeight: "600",
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
+                            border: "1px solid #93c5fd",
+                          }}
+                        >
+                          <span>{"\uD83D\uDCAC"}</span>
+                          <span>{pr.commentCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={prEmptyStyle}>No review requests</div>
             )}
           </div>
 
