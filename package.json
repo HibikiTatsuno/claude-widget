@@ -4,7 +4,7 @@
   "description": "Ubersicht widget for displaying Claude Code usage statistics and GitHub PR information",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/index.tsx --bundle --outfile=dist/claude-sessions.jsx --format=esm --external:uebersicht --loader:.tsx=tsx --jsx=automatic --jsx-import-source=preact",
+    "build": "esbuild src/index.tsx --bundle --outfile=dist/claude-sessions.jsx --format=esm --external:uebersicht --loader:.tsx=tsx --jsx=preserve",
     "dev": "npm run build -- --watch",
     "test": "vitest",
     "test:run": "vitest run",
